@@ -18,6 +18,7 @@ function iniciarModoLivre() {
 }
 let pontos = 0;
 let linhaAtual = 1;
+let timerKaraoke;
 
 // MOSTRAR NOME
 document.addEventListener("DOMContentLoaded", function () {
@@ -40,6 +41,9 @@ document.addEventListener("DOMContentLoaded", function () {
             if (musicaNome && musicaArtista) {
                 buscarLetra(musicaArtista, musicaNome);
             }
+        } else {
+            // Inicia o timer se não houver música selecionada (música padrão do HTML)
+            iniciarTimerKaraoke();
         }
 
         // MODO DESAFIO
@@ -66,9 +70,12 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 });
 
+function iniciarTimerKaraoke() {
+    clearTimeout(timerKaraoke);
+    avancarLinhaAutomatica(); // Ativa a primeira linha imediatamente
+}
 
-// FUNÇÃO CANTAR
-function cantar() {
+function avancarLinhaAutomatica() {
     let letraDiv = document.querySelector(".letra");
     if (!letraDiv) return;
     
@@ -80,26 +87,49 @@ function cantar() {
     // remover destaque anterior
     for (let i = 1; i <= totalLinhas; i++) {
         let linha = document.getElementById("linha" + i);
-        if (linha) linha.classList.remove("ativa");
+        if (linha) {
+            linha.classList.remove("ativa");
+            linha.style.animationDuration = ""; // limpa o tempo personalizado antigo
+        }
     }
 
     // destacar linha atual
     let linhaAtualEl = document.getElementById("linha" + linhaAtual);
+    let tempoLinha = 3000; // Tempo padrão fallback
+    
     if (linhaAtualEl) {
         linhaAtualEl.classList.add("ativa");
         linhaAtualEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        
+        // O pulo do gato: ajustar o tempo da animação com base no tamanho da frase!
+        // Média de ~120ms por letra + pequena pausa para respiração
+        let qtdCaracteres = linhaAtualEl.innerText.length;
+        tempoLinha = Math.max(2000, (qtdCaracteres * 120) + 500);
+        
+        // Aplica o tempo dinâmico na animação do CSS para sincronizar o efeito de cor
+        linhaAtualEl.style.animationDuration = (tempoLinha / 1000) + "s";
     }
 
-    // aumentar pontuação
-    pontos += Math.floor(Math.random() * 500);
-    document.getElementById("pontuacao").innerText = "⭐ " + pontos;
-
-    // próxima linha
+    // próxima linha para a próxima iteração
     linhaAtual++;
 
-    if (linhaAtual > totalLinhas) {
-        linhaAtual = 1;
+    if (linhaAtual <= totalLinhas + 1) {
+        timerKaraoke = setTimeout(avancarLinhaAutomatica, tempoLinha); // Agenda a próxima linha
     }
+}
+
+// FUNÇÃO CANTAR
+function cantar() {
+    // Apenas aumenta a pontuação, a letra avança sozinha agora
+    pontos += Math.floor(Math.random() * 100) + 50;
+    let pontuacaoEl = document.getElementById("pontuacao");
+    pontuacaoEl.innerText = "⭐ " + pontos;
+    
+    // Efeito visual rápido (batida) ao pontuar
+    pontuacaoEl.style.transform = "scale(1.2)";
+    setTimeout(() => {
+        pontuacaoEl.style.transform = "scale(1)";
+    }, 100);
 }
 
 // FINALIZAR
@@ -290,32 +320,70 @@ async function buscarMusica() {
         return;
     }
 
-    let url = `https://itunes.apple.com/search?term=${encodeURIComponent(termo)}&entity=song&limit=5`;
+    let divResultados = document.getElementById("resultadosBusca");
+    if (divResultados) {
+        divResultados.innerHTML = "<p style='color: var(--neon-blue);'>Buscando músicas e verificando letras... ⏳</p>";
+    }
+
+    let url = `https://itunes.apple.com/search?term=${encodeURIComponent(termo)}&entity=song&limit=10`;
     
     try {
         let response = await fetch(url);
         let data = await response.json();
         
-        let divResultados = document.getElementById("resultadosBusca");
         if (divResultados) {
             divResultados.innerHTML = "";
             
             if (data.results.length === 0) {
-                divResultados.innerHTML = "<p>Nenhuma música encontrada.</p>";
+                divResultados.innerHTML = "<p style='color: var(--neon-red);'>Nenhuma música encontrada.</p>";
                 return;
             }
 
-            data.results.forEach(musica => {
+            divResultados.innerHTML = "<p style='color: var(--neon-yellow);'>Filtrando músicas com letra disponível... ⏳</p>";
+
+            let validTracks = [];
+
+            // Verifica a letra de cada música encontrada antes de exibir (em paralelo)
+            await Promise.all(data.results.map(async (musica) => {
+                let nomeLimpo = musica.trackName.replace(/\(.*?\)/g, '').replace(/\[.*?\]/g, '').split('-')[0].trim();
+                let artistaLimpo = musica.artistName.split(/feat\.?/i)[0].split(',')[0].split('&')[0].trim();
+                
+                try {
+                    let res = await fetch(`https://api.lyrics.ovh/v1/${encodeURIComponent(artistaLimpo)}/${encodeURIComponent(nomeLimpo)}`);
+                    if (res.ok) {
+                        let letraData = await res.json();
+                        if (letraData.lyrics) {
+                            validTracks.push({
+                                trackName: musica.trackName,
+                                artistName: musica.artistName,
+                                letra: letraData.lyrics
+                            });
+                        }
+                    }
+                } catch (e) {
+                    // Ignora se der erro ou não tiver letra
+                }
+            }));
+
+            divResultados.innerHTML = "";
+
+            if (validTracks.length === 0) {
+                divResultados.innerHTML = "<p style='color: var(--neon-red);'>Nenhuma música com letra foi encontrada para essa busca. Tente outro termo.</p>";
+                return;
+            }
+
+            // Exibe APENAS as músicas que sabemos que têm letra
+            validTracks.forEach(musica => {
                 let item = document.createElement("div");
                 item.style.background = "rgba(255, 255, 255, 0.1)";
                 item.style.margin = "10px 0";
                 item.style.padding = "10px";
                 item.style.borderRadius = "8px";
                 item.style.cursor = "pointer";
-                item.innerHTML = `<strong>${musica.trackName}</strong> <br> <small>${musica.artistName}</small>`;
+                item.innerHTML = `<strong>${musica.trackName}</strong> <br> <small>${musica.artistName}</small> <span style='float:right'>📝</span>`;
                 
                 item.onclick = function() {
-                    selecionarMusica(musica.trackName, musica.artistName);
+                    selecionarMusica(musica.trackName, musica.artistName, musica.letra);
                 };
                 
                 divResultados.appendChild(item);
@@ -323,16 +391,25 @@ async function buscarMusica() {
         }
     } catch (erro) {
         console.error("Erro ao buscar música:", erro);
-        alert("Erro ao buscar música. Tente novamente mais tarde.");
+        if (divResultados) {
+            divResultados.innerHTML = "<p style='color: var(--neon-red);'>Erro ao buscar música. Tente novamente.</p>";
+        }
     }
 }
 
-function selecionarMusica(nome, artista) {
+function selecionarMusica(nome, artista, letra) {
     let musicaCompleta = nome + " - " + artista;
     localStorage.setItem("musicaSelecionada", musicaCompleta);
     localStorage.setItem("musicaNome", nome);
     localStorage.setItem("musicaArtista", artista);
     
+    // Já salvamos a letra aqui para evitar buscar duas vezes e correr risco de falhar
+    if (letra) {
+        localStorage.setItem("musicaLetra", letra);
+    } else {
+        localStorage.removeItem("musicaLetra");
+    }
+
     let inputBusca = document.getElementById("buscaMusica");
     if (inputBusca) {
         inputBusca.value = ""; // Limpa o campo de busca
@@ -349,26 +426,37 @@ async function buscarLetra(artista, musica) {
     let letraDiv = document.querySelector(".letra");
     if (!letraDiv) return;
 
-    letraDiv.innerHTML = "<p id='linha1'>Procurando letra na internet...</p>";
+    letraDiv.innerHTML = "<p id='linha1'>Preparando letra...</p>";
 
     try {
-        let response = await fetch(`https://api.lyrics.ovh/v1/${encodeURIComponent(artista)}/${encodeURIComponent(musica)}`);
-        if (!response.ok) throw new Error("Letra não encontrada");
+        let letraSalva = localStorage.getItem("musicaLetra");
+        let textoLetra = "";
         
-        let data = await response.json();
-
-        if (data.lyrics) {
-            let linhas = data.lyrics.replace(/Paroles de la chanson.*(\r\n|\n)/g, '').split('\n').filter(linha => linha.trim() !== "");
-            let html = "";
-            linhas.forEach((linha, index) => {
-                html += `<p id="linha${index + 1}">♪ ${linha}</p>`;
-            });
-            letraDiv.innerHTML = html;
+        if (letraSalva) {
+            textoLetra = letraSalva;
         } else {
-            throw new Error("Letra vazia");
+            // Fallback caso não tenha vindo da pesquisa principal
+            let musicaLimpa = musica.replace(/\(.*?\)/g, '').replace(/\[.*?\]/g, '').split('-')[0].trim();
+            let artistaLimpo = artista.split(/feat\.?/i)[0].split(',')[0].split('&')[0].trim();
+            let response = await fetch(`https://api.lyrics.ovh/v1/${encodeURIComponent(artistaLimpo)}/${encodeURIComponent(musicaLimpa)}`);
+            if (!response.ok) throw new Error("Letra não encontrada");
+            let data = await response.json();
+            if (!data.lyrics) throw new Error("Letra vazia");
+            textoLetra = data.lyrics;
         }
+
+        let linhas = textoLetra.replace(/Paroles de la chanson.*(\r\n|\n)/g, '').split('\n').filter(linha => linha.trim() !== "");
+        let html = "";
+        linhas.forEach((linha, index) => {
+            html += `<p id="linha${index + 1}">♪ ${linha}</p>`;
+        });
+        letraDiv.innerHTML = html;
+        linhaAtual = 1;
+        iniciarTimerKaraoke();
     } catch (erro) {
         console.error("Erro ao buscar letra:", erro);
         letraDiv.innerHTML = `<p id="linha1">♪ Letra não encontrada.</p><p id="linha2">♪ Solte a voz e cante com o coração!</p><p id="linha3">♪ (Modo Instrumental)</p>`;
+        linhaAtual = 1;
+        iniciarTimerKaraoke(); // Inicia o timer mesmo na tela de fallback
     }
 }
