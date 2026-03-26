@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Karaokê</title>
+
+    <link rel="stylesheet" href="css/style.css">
+
+    <!-- Fonte Google -->
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;600;700&display=swap" rel="stylesheet">
+</head>
+
+<body>
+
+    <div class="container">
+
+        <h1>🎤 KARAOKÊ</h1>
+
+        <!-- NOME -->
+        <p id="nomeUsuario"></p>
+
+        <h2 id="quemCanta"></h2>
+
+        <!-- VISUALIZADOR DE ÁUDIO -->
+        <div class="audio-visualizer">
+            <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+        </div>
+
+        <!-- PONTUAÇÃO -->
+        <h2 id="pontuacao">⭐ 0</h2>
+
+        <!-- LETRA -->
+        <div class="letra">
+            <p id="linha1">♪ Quando eu digo que deixei de te amar</p>
+            <p id="linha2">♪ É porque eu te amo</p>
+            <p id="linha3">♪ Quando eu digo que não quero mais você</p>
+        </div>
+
+        <!-- BOTÕES -->
+        <div class="controles">
+            <button onclick="cantar()">🎤 Cantar</button>
+            <button onclick="finalizar()">Finalizar</button>
+        </div>
+
+    </div>
+
+    <script src="js/script.js"></script>
+
+</body>
+</html>

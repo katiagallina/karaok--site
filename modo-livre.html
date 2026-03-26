@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Modo Livre</title>
+
+    <!-- Fonte Google -->
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;600;700&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="css/style.css">
+</head>
+
+<body>
+
+    <div class="container">
+
+        <h1>🎤 MODO LIVRE</h1>
+        <p>Escolha sua música e cante!</p>
+
+        <!-- NOME -->
+        <div class="campo">
+            <label>Seu nome:</label>
+            <input type="text" id="nome" placeholder="Digite seu nome">
+        </div>
+
+        <!-- BUSCA -->
+        <div class="campo">
+            <label>🔎 Buscar música:</label>
+            <input type="text" id="buscaMusica" placeholder="Digite o nome da música">
+            <button onclick="buscarMusica()" class="btn" style="margin-top: 10px; background: #3b82f6; padding: 10px;">🔍 Pesquisar</button>
+        </div>
+        <div id="resultadosBusca"></div>
+
+        <!-- CATEGORIAS -->
+        <div class="categorias">
+            <p>🎵 Categorias:</p>
+
+            <div class="botoes-categorias">
+                <button>Sertanejo</button>
+                <button>Pop</button>
+                <button>Rock</button>
+                <button>Gospel</button>
+            </div>
+        </div>
+
+        <!-- BOTÕES -->
+        <div class="botoes">
+            <button class="btn livre" onclick="iniciarModoLivre()">🎤 Começar a cantar</button>
+            <a href="index.html" class="btn" style="background: #64748b;">⬅ Voltar</a>
+        </div>
+
+    </div>
+
+    <script src="js/script.js"></script>
+
+</body>
+</html>

@@ -1,0 +1,355 @@
+/* FONT & RESET */
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;600;700&display=swap');
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+:root {
+    --neon-blue: #00e5ff;
+    --neon-green: #22c55e;
+    --neon-yellow: #facc15;
+    --neon-red: #ef4444;
+    --dark-bg-1: #0f172a;
+    --dark-bg-2: #1e3a8a;
+    --text-light: #f8fafc;
+    --text-muted: #cbd5f5;
+}
+
+/* CORPO */
+body {
+    font-family: 'Poppins', sans-serif;
+    background: linear-gradient(135deg, var(--dark-bg-1), var(--dark-bg-2));
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    color: white;
+    overflow: hidden; /* Evita scrollbars de glows */
+}
+
+/* CONTAINER - Glassmorphism */
+.container {
+    background: rgba(15, 23, 42, 0.6);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(0, 229, 255, 0.2);
+    box-shadow: 0 0 40px rgba(0, 0, 0, 0.5);
+    padding: 40px;
+    border-radius: 20px;
+    text-align: center;
+    width: 480px;
+    max-width: 95%;
+    max-height: 90vh;
+    overflow-y: auto;
+    position: relative;
+}
+
+/* Custom Scrollbar */
+.container::-webkit-scrollbar {
+    width: 5px;
+}
+.container::-webkit-scrollbar-track {
+    background: transparent;
+}
+.container::-webkit-scrollbar-thumb {
+    background: var(--neon-blue);
+    border-radius: 10px;
+}
+
+/* TÍTULOS NEON */
+h1 {
+    margin-bottom: 10px;
+    font-weight: 700;
+    font-size: 2.5rem;
+    color: var(--text-light);
+    text-shadow: 0 0 5px var(--neon-blue), 0 0 15px var(--neon-blue), 0 0 25px var(--neon-blue);
+}
+
+h2 {
+    margin: 15px 0;
+    color: var(--text-light);
+    text-shadow: 0 0 5px var(--neon-blue), 0 0 10px var(--neon-blue);
+}
+
+/* SUBTEXTO */
+p {
+    color: var(--text-muted);
+    margin-bottom: 25px;
+}
+
+/* BOTÕES PRINCIPAIS */
+.botoes {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    margin-top: 20px;
+}
+
+.btn {
+    text-decoration: none;
+    padding: 15px;
+    border-radius: 50px;
+    font-weight: 600;
+    transition: all 0.3s ease;
+    display: block;
+    border: none;
+    color: var(--text-light);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    font-size: 1rem;
+}
+
+.btn.livre {
+    background: linear-gradient(45deg, #16a34a, var(--neon-green));
+    box-shadow: 0 0 15px var(--neon-green);
+}
+
+.btn.desafio {
+    background: linear-gradient(45deg, #dc2626, var(--neon-red));
+    box-shadow: 0 0 15px var(--neon-red);
+}
+
+.btn.ranking {
+    background: linear-gradient(45deg, #ca8a04, var(--neon-yellow));
+    box-shadow: 0 0 15px var(--neon-yellow);
+}
+
+.btn.confirm {
+    background: linear-gradient(45deg, #3b82f6, var(--neon-blue));
+    box-shadow: 0 0 15px var(--neon-blue);
+}
+
+.btn:hover {
+    transform: scale(1.05) translateY(-2px);
+    box-shadow: 0 0 25px var(--glow-color, #fff); /* Fallback color */
+}
+.btn.livre:hover { --glow-color: var(--neon-green); }
+.btn.desafio:hover { --glow-color: var(--neon-red); }
+.btn.ranking:hover { --glow-color: var(--neon-yellow); }
+.btn.confirm:hover { --glow-color: var(--neon-blue); }
+
+/* CAMPOS DE INPUT */
+.campo {
+    margin-bottom: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    text-align: left;
+    width: 100%;
+}
+.campo label {
+    margin-bottom: 8px;
+    font-weight: 600;
+    color: var(--neon-blue);
+}
+.campo input {
+    padding: 12px 20px;
+    border-radius: 50px;
+    border: 1px solid var(--neon-blue);
+    background: rgba(0, 0, 0, 0.3);
+    width: 100%;
+    color: var(--text-light);
+    font-size: 1rem;
+}
+.campo input:focus {
+    outline: none;
+    box-shadow: 0 0 10px var(--neon-blue);
+}
+
+/* CATEGORIAS & BUSCA */
+.botoes-categorias {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: center;
+    margin: 20px 0;
+}
+.botoes-categorias button, button.btn {
+    padding: 10px 15px;
+    border: 1px solid var(--neon-blue);
+    border-radius: 50px;
+    cursor: pointer;
+    background: transparent;
+    color: var(--neon-blue);
+    transition: 0.3s;
+}
+.botoes-categorias button:hover, button.btn:hover {
+    background: var(--neon-blue);
+    color: var(--dark-bg-1);
+    box-shadow: 0 0 15px var(--neon-blue);
+}
+
+/* TELA KARAOKÊ */
+#pontuacao {
+    font-size: 3rem;
+    font-weight: 700;
+    color: var(--neon-yellow);
+    text-shadow: 0 0 10px var(--neon-yellow), 0 0 25px var(--neon-yellow), 0 0 40px var(--neon-yellow);
+}
+.letra {
+    margin: 20px 0;
+    line-height: 2.2;
+    max-height: 220px;
+    overflow-y: auto;
+    padding: 20px;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 15px;
+    border: 1px solid rgba(0, 229, 255, 0.2);
+    font-size: 1.1rem;
+}
+.letra::-webkit-scrollbar { display: none; } /* Esconde scrollbar da letra */
+
+.ativa {
+    color: var(--neon-blue);
+    font-weight: 700;
+    text-shadow: 0 0 8px var(--neon-blue);
+    background: rgba(0, 229, 255, 0.1);
+    padding: 5px;
+    border-radius: 5px;
+    display: block;
+}
+
+/* VISUALIZADOR DE ÁUDIO */
+.audio-visualizer {
+    display: flex;
+    justify-content: center;
+    align-items: flex-end;
+    height: 50px;
+    gap: 5px;
+    margin: 15px 0;
+}
+.audio-visualizer span {
+    width: 6px;
+    height: 5px;
+    background: var(--neon-blue);
+    border-radius: 5px;
+    animation: audio-wave 1.2s infinite ease-in-out;
+}
+@keyframes audio-wave {
+    0% { height: 5px; }
+    50% { height: 50px; }
+    100% { height: 5px; }
+}
+/* Animação com delay para cada barra */
+.audio-visualizer span:nth-child(2) { animation-delay: 0.15s; }
+.audio-visualizer span:nth-child(3) { animation-delay: 0.3s; }
+.audio-visualizer span:nth-child(4) { animation-delay: 0.45s; }
+.audio-visualizer span:nth-child(5) { animation-delay: 0.6s; }
+.audio-visualizer span:nth-child(6) { animation-delay: 0.75s; }
+.audio-visualizer span:nth-child(7) { animation-delay: 0.9s; }
+.audio-visualizer span:nth-child(8) { animation-delay: 1.05s; }
+
+.controles {
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+    margin-top: 20px;
+}
+.controles button {
+    padding: 15px 30px;
+    border-radius: 50px;
+    border: none;
+    font-weight: bold;
+    cursor: pointer;
+    transition: 0.3s;
+    text-transform: uppercase;
+    font-size: 1rem;
+}
+.controles button:first-child { /* Cantar */
+    background: linear-gradient(45deg, #00b8d4, var(--neon-blue));
+    color: var(--dark-bg-1);
+    box-shadow: 0 0 20px var(--neon-blue);
+}
+.controles button:last-child { /* Finalizar */
+    background: linear-gradient(45deg, #16a34a, var(--neon-green));
+    color: #fff;
+    box-shadow: 0 0 20px var(--neon-green);
+}
+.controles button:hover {
+    transform: scale(1.05);
+}
+
+/* RANKING */
+#listaRanking {
+    list-style: none;
+    margin-top: 20px;
+    padding: 0;
+}
+#listaRanking li {
+    background: rgba(0, 229, 255, 0.1);
+    border: 1px solid rgba(0, 229, 255, 0.2);
+    padding: 15px;
+    border-radius: 10px;
+    margin-bottom: 10px;
+    font-size: 1.1rem;
+    transition: 0.3s;
+}
+#listaRanking li:hover {
+    transform: scale(1.02);
+    background: rgba(0, 229, 255, 0.2);
+}
+#listaRanking li:first-child {
+    background: rgba(250, 204, 21, 0.2);
+    border-color: rgba(250, 204, 21, 0.5);
+    color: var(--neon-yellow);
+    font-weight: bold;
+    transform: scale(1.05);
+    box-shadow: 0 0 20px rgba(250, 204, 21, 0.5);
+}
+
+/* VS (duelo) */
+.vs {
+    font-size: 6rem;
+    font-weight: 700;
+    margin: 10px 0;
+    color: var(--neon-yellow);
+    text-shadow: 0 0 20px var(--neon-yellow), 0 0 40px var(--neon-yellow);
+}
+#j1, #j2 {
+    font-size: 2rem;
+    text-shadow: 0 0 10px var(--neon-blue), 0 0 20px var(--neon-blue);
+}
+
+/* TELA RESULTADO */
+.vencedor {
+    font-size: 2.2rem;
+    font-weight: 700;
+    color: var(--neon-green);
+    margin-top: 20px;
+    text-shadow: 0 0 15px var(--neon-green), 0 0 25px var(--neon-green);
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+    100% { transform: scale(1); }
+}
+
+#pontuacaoFinal {
+    color: var(--neon-yellow);
+    text-shadow: 0 0 10px var(--neon-yellow), 0 0 20px var(--neon-yellow);
+}
+
+/* BUSCA DE MÚSICA */
+#resultadosBusca div {
+    background: rgba(255, 255, 255, 0.1) !important;
+    transition: 0.3s;
+}
+#resultadosBusca div:hover {
+    background: rgba(0, 229, 255, 0.2) !important;
+    border-left: 3px solid var(--neon-blue);
+}
+
+/* Estilo para o botão de pesquisa que está inline */
+button[onclick="buscarMusica()"] {
+    background: var(--neon-blue) !important;
+    color: var(--dark-bg-1);
+    border: none !important;
+    padding: 12px !important;
+    border-radius: 50px !important;
+    font-weight: 600;
+}
