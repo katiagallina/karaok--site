@@ -21,12 +21,13 @@
         <!-- NOME -->
         <div class="campo">
             <label>Seu nome:</label>
-            <input type="text" id="nome" placeholder="Digite seu nome">
+           <input type="text" id="nome" placeholder="Digite seu nome de cantor(a)">
         </div>
 
         <!-- BUSCA -->
         <div class="campo">
             <label>🔎 Buscar música:</label>
+            <small style="color: var(--text-muted); margin-bottom: 10px; display: block;">Encontre a música e a letra automaticamente.</small>
             <input type="text" id="buscaMusica" placeholder="Digite o nome da música">
             <button onclick="buscarMusica()" class="btn" style="margin-top: 10px; background: #3b82f6; padding: 10px;">🔍 Pesquisar</button>
         </div>
@@ -47,7 +48,7 @@
         <!-- BOTÕES -->
         <div class="botoes">
             <button class="btn livre" onclick="iniciarModoLivre()">🎤 Começar a cantar</button>
-            <a href="index.html" class="btn" style="background: #64748b;">⬅ Voltar</a>
+          <a href="#" onclick="voltarMenu()" class="btn" style="background: #64748b;">⬅ Voltar</a>
         </div>
 
     </div>
