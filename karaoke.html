@@ -11,25 +11,17 @@
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;600;700&display=swap" rel="stylesheet">
 </head>
 
-<bo>
+<body>
 
     <div class="container">
 
         <h1>🎤 KARAOKÊ</h1>
-        <h2 id="nomeMusica"></h2>
-        <p id="loadingMusica">🎵 Carregando música...</p>
+       <h2 id="nomeMusica"></h2>
+        <p id="loadingMusica">🎵 Carregando letra...</p>
 
-        <!-- Player do YouTube (será preenchido pela API) -->
-        <div id="youtube-player" style="border-radius: 10px; overflow: hidden; margin-bottom: 10px;"></div>
-
-        <!-- Interface do Player -->
-        <div class="player-interface">
-            <div class="progress-bar-container">
-                <span id="currentTime">0:00</span>
-                <div class="progress-bar"><div id="progress" class="progress"></div></div>
-                <span id="totalTime">0:00</span>
-            </div>
-        </div>
+        <!-- PLAYER DE ÁUDIO -->
+        <audio id="audioPlayer" controls style="margin: 15px 0; width: 100%; border-radius: 50px; outline: none;"></audio>
+        <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: -15px;">Pressione play para ouvir a prévia e iniciar a letra.</p>
 
         <!-- NOME -->
         <p id="nomeUsuario"></p>
@@ -39,26 +31,18 @@
         <h2 id="pontuacao">⭐ 0</h2>
 
         <!-- LETRA -->
-        <div class="letra">
-            <p id="linha1">♪ Quando eu digo que deixei de te amar</p>
-            <p id="linha2">♪ É porque eu te amo</p>
-            <p id="linha3">♪ Quando eu digo que não quero mais você</p>
-        </div>
+        <div class="letra"></div>
 
         <!-- BOTÕES -->
         <div class="controles">
-            <button id="playPauseBtn" onclick="togglePlayPause()">
-                <svg id="playIcon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="24" height="24"><path d="M8 5v14l11-7z"></path></svg>
-                <svg id="pauseIcon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="24" height="24" style="display: none;"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"></path></svg>
-            </button>
             <button onclick="cantar()">🎤 Cantar</button>
             <button onclick="finalizar()">Finalizar</button>
         </div>
 
     </div>
 
-    <script src="https://www.youtube.com/iframe_api"></script>
-<script src="js/script.js"></script>
+    <!-- Seu JS -->
+    <script src="js/script.js"></script>
 
 </body>
 </html>

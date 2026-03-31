@@ -20,8 +20,6 @@ function iniciarModoLivre() {
 let pontos = 0;
 let linhaAtual = 1;
 let timerKaraoke;
-let ytPlayer;
-let progressInterval;
 
 document.addEventListener("DOMContentLoaded", function () {
 
@@ -54,6 +52,26 @@ document.addEventListener("DOMContentLoaded", function () {
                 campo.innerText = "Cantor: " + nome;
             }
         }
+
+        // Configura o player de áudio
+        let audioSrc = localStorage.getItem("musicaAudio");
+        let audioPlayer = document.getElementById("audioPlayer");
+        
+        if (audioPlayer) {
+            if (audioSrc) {
+                audioPlayer.src = audioSrc;
+                audioPlayer.style.display = "block";
+                audioPlayer.onplay = () => iniciarTimerKaraoke(); // A letra anda se der Play
+                audioPlayer.onpause = () => clearTimeout(timerKaraoke); // A letra para se der Pause
+            } else {
+                audioPlayer.style.display = "none";
+                let loading = document.getElementById("loadingMusica");
+                if (loading) {
+                    loading.innerText = "⚠️ Sem prévia de áudio. A letra passará automaticamente.";
+                }
+                setTimeout(iniciarTimerKaraoke, 2000); // Inicia automático
+            }
+        }
     }
 });
 
@@ -61,8 +79,6 @@ document.addEventListener("DOMContentLoaded", function () {
 
 function iniciarTimerKaraoke() {
     clearTimeout(timerKaraoke);
-
-    if (!ytPlayer || ytPlayer.getPlayerState() !== YT.PlayerState.PLAYING) return;
 
     avancarLinhaAutomatica();
 }
@@ -112,10 +128,7 @@ function cantar() {
 
 function finalizar() {
 
-    if (ytPlayer) ytPlayer.stopVideo();
-
     clearTimeout(timerKaraoke);
-    clearInterval(progressInterval);
 
     localStorage.setItem("pontuacao", pontos);
 
@@ -135,63 +148,52 @@ async function buscarMusica() {
 
     let div = document.getElementById("resultadosBusca");
     div.innerHTML = "Buscando...";
+    
+    let url = `https://itunes.apple.com/search?term=${encodeURIComponent(termo)}&entity=song&limit=5`;
 
-    let url = `https://itunes.apple.com/search?term=${encodeURIComponent(termo)}&entity=song&limit=10`;
+    try {
+        let res = await fetch(url);
+        let data = await res.json();
 
-    let res = await fetch(url);
-    let data = await res.json();
+        div.innerHTML = ""; 
 
-    let musicas = data.results.slice(0, 5);
-    let validas = [];
+        if (data.results.length === 0) {
+            div.innerHTML = "Nenhuma música encontrada.";
+            return;
+        }
 
-    await Promise.all(musicas.map(async (m) => {
-        try {
-            let r = await fetch(`https://api.lyrics.ovh/v1/${m.artistName}/${m.trackName}`);
-            if (r.ok) {
-                let l = await r.json();
-                if (l.lyrics) {
-                    validas.push({
-                        nome: m.trackName,
-                        artista: m.artistName,
-                        letra: l.lyrics
-                    });
-                }
-            }
-        } catch {}
-    }));
+        data.results.forEach(m => {
+            let item = document.createElement("div");
+            item.innerHTML = `<strong>${m.trackName}</strong><br>${m.artistName}`;
+            item.style.cursor = "pointer";
+            item.style.padding = "10px";
 
-    div.innerHTML = "";
-
-    validas.forEach(m => {
-
-        let item = document.createElement("div");
-
-        item.innerHTML = `<strong>${m.nome}</strong><br>${m.artista}`;
-        item.style.cursor = "pointer";
-        item.style.padding = "10px";
-
-        item.onclick = () => {
-
-            document.querySelectorAll("#resultadosBusca div")
-                .forEach(el => el.style.border = "none");
-
-            item.style.border = "2px solid #22c55e";
-
-            selecionarMusica(m.nome, m.artista, m.letra);
-        };
-
-        div.appendChild(item);
-    });
+            item.onclick = () => {
+                document.querySelectorAll("#resultadosBusca div")
+                    .forEach(el => el.style.border = "none");
+                item.style.border = "2px solid #22c55e";
+                selecionarMusica(m.trackName, m.artistName, m.previewUrl);
+            };
+            div.appendChild(item);
+        });
+    } catch (error) {
+        div.innerHTML = "Erro ao buscar músicas. Tente novamente.";
+        console.error("Erro na busca do iTunes:", error);
+    }
 }
 
 // ================= SELECIONAR =================
 
-function selecionarMusica(nome, artista, letra) {
-
+function selecionarMusica(nome, artista, previewUrl) {
     localStorage.setItem("musicaSelecionada", nome + " - " + artista);
     localStorage.setItem("musicaNome", nome);
     localStorage.setItem("musicaArtista", artista);
-    localStorage.setItem("musicaLetra", letra);
+    if (previewUrl) {
+        localStorage.setItem("musicaAudio", previewUrl);
+    } else {
+        localStorage.removeItem("musicaAudio");
+    }
+    localStorage.removeItem("musicaLetra");
 }
 
 // ================= LETRA =================
@@ -199,69 +201,62 @@ function selecionarMusica(nome, artista, letra) {
 async function buscarLetra(artista, musica) {
 
     let div = document.querySelector(".letra");
+    let loading = document.getElementById("loadingMusica");
 
-    let letra = localStorage.getItem("musicaLetra");
+    // O GRANDE SEGREDO: Limpar o nome da música!
+    // Remove coisas como "(Remastered)", "(feat. XYZ)", "[Live]" que vêm do iTunes e quebram a busca
+    let musicaLimpa = musica.replace(/\([^)]*\)/g, '').replace(/\[[^\]]*\]/g, '').trim();
+    let termoDeBusca = `${musicaLimpa} ${artista}`;
 
-    if (!letra) {
-        let r = await fetch(`https://api.lyrics.ovh/v1/${artista}/${musica}`);
-        let d = await r.json();
-        letra = d.lyrics;
+    const displayLyrics = (letra) => {
+        const linhas = letra.split("\n").filter(l => l.trim());
+        div.innerHTML = "";
+        linhas.forEach((l, i) => {
+            div.innerHTML += `<p id="linha${i + 1}">${l.trim()}</p>`;
+        });
+        linhaAtual = 1;
+        if (loading) loading.style.display = "none";
+    };
+
+    // --- TENTATIVA 1: Popcat API (Muito inteligente e rápida) ---
+    try {
+        div.innerHTML = "Buscando letra...";
+        const url = `https://api.popcat.xyz/lyrics?song=${encodeURIComponent(termoDeBusca)}`;
+        const response = await fetch(url);
+        const data = await response.json();
+        
+        if (data && data.lyrics) {
+            displayLyrics(data.lyrics);
+            return; // Sucesso!
+        }
+        throw new Error("Não encontrada no Popcat");
+    } catch (error) {
+        console.warn("Fonte 1 falhou, tentando alternativa...", error.message);
     }
 
-    let linhas = letra.split("\n").filter(l => l.trim());
-
-    div.innerHTML = "";
-
-    linhas.forEach((l, i) => {
-        div.innerHTML += `<p id="linha${i + 1}">${l}</p>`;
-    });
-
-    linhaAtual = 1;
-}
-
-// ================= PLAYER =================
-
-function onYouTubeIframeAPIReady() {
-
-    let musica = localStorage.getItem("musicaSelecionada");
-
-    if (!musica) return;
-
-    ytPlayer = new YT.Player('youtube-player', {
-        height: '215',
-        width: '100%',
-        playerVars: {
-            autoplay: 1,
-            controls: 0,
-            listType: 'search',
-            list: musica + " karaoke instrumental"
-        },
-        events: {
-            onReady: onPlayerReady,
-            onStateChange: onPlayerStateChange
+    // --- TENTATIVA 2: LRCLIB (Com busca flexível) ---
+    try {
+        const url = `https://lrclib.net/api/search?q=${encodeURIComponent(termoDeBusca)}`;
+        const response = await fetch(url);
+        const data = await response.json();
+        
+        if (data && data.length > 0 && data[0].plainLyrics) {
+            displayLyrics(data[0].plainLyrics);
+            return; // Sucesso!
         }
-    });
-}
-
-function onPlayerReady(e) {
-    e.target.playVideo();
-
-    let loading = document.getElementById("loadingMusica");
-    if (loading) loading.style.display = "none";
-}
-
-function onPlayerStateChange(e) {
-    if (e.data === YT.PlayerState.PLAYING) {
-        iniciarTimerKaraoke();
-    } else {
-        clearTimeout(timerKaraoke);
+        throw new Error("Não encontrada no LRCLIB");
+    } catch (error) {
+        console.error("Todas as buscas falharam.", error.message);
+        div.innerHTML = `Desculpe, não encontramos a letra para "${musicaLimpa}". Tente buscar por outra versão.`;
+        if (loading) {
+            loading.innerText = "❌ Letra indisponível.";
+        }
     }
 }
 
 // ================= VOLTAR =================
 
 function voltarMenu() {
-
     localStorage.removeItem("musicaSelecionada");
     localStorage.removeItem("musicaNome");
     localStorage.removeItem("musicaArtista");

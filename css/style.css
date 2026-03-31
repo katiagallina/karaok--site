@@ -209,6 +209,9 @@ p {
     border-radius: 5px;
     margin-bottom: 5px;
 }
+.letra p {
+    transition: all 0.3s ease;
+}
 
 .ativa {
     font-weight: 700;
@@ -234,8 +237,12 @@ p {
 }
 
 @keyframes karaoke-fill {
-    0% { background-position: 100% 0; }
-    100% { background-position: 0% 0; }
+    from {
+        background-position: 100% 0;
+    }
+    to {
+        background-position: 0 0;
+    }
 }
 
 .controles {
