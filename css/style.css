@@ -159,15 +159,8 @@ p {
     box-shadow: 0 0 10px var(--neon-blue);
 }
 
-/* CATEGORIAS & BUSCA */
-.botoes-categorias {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
-    justify-content: center;
-    margin: 20px 0;
-}
-.botoes-categorias button, button.btn {
+/* BUSCA */
+button.btn {
     padding: 10px 15px;
     border: 1px solid var(--neon-blue);
     border-radius: 50px;
@@ -176,7 +169,7 @@ p {
     color: var(--neon-blue);
     transition: 0.3s;
 }
-.botoes-categorias button:hover, button.btn:hover {
+button.btn:hover {
     background: var(--neon-blue);
     color: var(--dark-bg-1);
     box-shadow: 0 0 15px var(--neon-blue);
@@ -217,14 +210,6 @@ p {
     font-weight: 700;
     position: relative;
     z-index: 1;
-    /* Efeito de preenchimento de cor (Karaokê Fill) */
-    background-image: linear-gradient(to right, var(--neon-blue) 50%, var(--text-muted) 50%);
-    background-size: 200% 100%;
-    background-position: 100% 0;
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
-    animation: karaoke-fill 3s linear forwards; /* 3 segundos acompanhando o timer */
 }
 
 .ativa::before {
@@ -236,13 +221,15 @@ p {
     z-index: -1;
 }
 
-@keyframes karaoke-fill {
-    from {
-        background-position: 100% 0;
-    }
-    to {
-        background-position: 0 0;
-    }
+/* Sincronização por palavra */
+.letra p span {
+    color: var(--text-muted);
+    transition: color 0.1s ease, text-shadow 0.1s ease;
+}
+
+.letra p span.cantada {
+    color: var(--neon-blue);
+    text-shadow: 0 0 12px var(--neon-blue);
 }
 
 .controles {
@@ -406,4 +393,180 @@ button[onclick="buscarMusica()"] {
     padding: 12px !important;
     border-radius: 50px !important;
     font-weight: 600;
+}
+
+/* ================= TELA INICIAL ================= */
+
+.inicio {
+    animation: fadeIn 1.5s ease;
+}
+
+/* LOGO ANIMADA */
+.logo {
+    font-size: 3rem;
+    animation: glow 2s infinite alternate;
+}
+
+/* FRASE */
+.frase {
+    font-size: 1.2rem;
+    margin-top: 10px;
+    color: var(--text-muted);
+    animation: slideUp 1s ease;
+}
+
+/* DESCRIÇÃO */
+.descricao {
+    margin-top: 10px;
+    font-size: 0.95rem;
+    color: var(--text-muted);
+    animation: slideUp 1.5s ease;
+}
+
+/* BOTÃO PRINCIPAL */
+.btn.iniciar {
+    background: linear-gradient(45deg, #00e5ff, #3b82f6);
+    box-shadow: 0 0 20px var(--neon-blue);
+    font-size: 1.1rem;
+}
+
+/* ANIMAÇÕES */
+@keyframes glow {
+    from {
+        text-shadow: 0 0 10px var(--neon-blue), 0 0 20px var(--neon-blue);
+    }
+    to {
+        text-shadow: 0 0 20px var(--neon-blue), 0 0 40px var(--neon-blue);
+    }
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: scale(0.95);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* ================= TELA INICIAL APP ================= */
+
+/* FUNDO COM PARTÍCULAS */
+.particles {
+    position: fixed;
+    width: 100%;
+    height: 100%;
+    background: transparent;
+    overflow: hidden;
+    z-index: 0;
+}
+
+.particles::before,
+.particles::after {
+    content: "";
+    position: absolute;
+    width: 200%;
+    height: 200%;
+    background-image: radial-gradient(var(--neon-blue) 1px, transparent 1px);
+    background-size: 50px 50px;
+    animation: moveParticles 20s linear infinite;
+    opacity: 0.2;
+}
+
+.particles::after {
+    animation-duration: 40s;
+    opacity: 0.1;
+}
+
+/* CONTAINER ACIMA DAS PARTÍCULAS */
+.inicio {
+    position: relative;
+    z-index: 1;
+    animation: fadeZoom 1.5s ease;
+}
+
+/* LOGO */
+.logo {
+    font-size: 3rem;
+    animation: glow 2s infinite alternate;
+}
+
+/* FRASE */
+.frase {
+    font-size: 1.2rem;
+    margin-top: 10px;
+    color: var(--text-muted);
+    animation: slideUp 1s ease;
+}
+
+/* DESCRIÇÃO */
+.descricao {
+    margin-top: 10px;
+    font-size: 0.95rem;
+    color: var(--text-muted);
+    animation: slideUp 1.5s ease;
+}
+
+/* BOTÃO */
+.btn.iniciar {
+    background: linear-gradient(45deg, #00e5ff, #3b82f6);
+    box-shadow: 0 0 25px var(--neon-blue);
+    font-size: 1.2rem;
+    animation: pulseBtn 2s infinite;
+}
+
+/* ANIMAÇÕES */
+@keyframes glow {
+    from {
+        text-shadow: 0 0 10px var(--neon-blue), 0 0 20px var(--neon-blue);
+    }
+    to {
+        text-shadow: 0 0 25px var(--neon-blue), 0 0 50px var(--neon-blue);
+    }
+}
+
+@keyframes fadeZoom {
+    from {
+        opacity: 0;
+        transform: scale(0.9);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateY(30px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes pulseBtn {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+    100% { transform: scale(1); }
+}
+
+@keyframes moveParticles {
+    from { transform: translate(0, 0); }
+    to { transform: translate(-50px, -50px); }
 }

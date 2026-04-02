@@ -19,9 +19,20 @@
        <h2 id="nomeMusica"></h2>
         <p id="loadingMusica">🎵 Carregando letra...</p>
 
-        <!-- PLAYER DE ÁUDIO -->
-        <audio id="audioPlayer" controls style="margin: 15px 0; width: 100%; border-radius: 50px; outline: none;"></audio>
-        <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: -15px;">Pressione play para ouvir a prévia e iniciar a letra.</p>
+        <!-- PLAYER DO YOUTUBE -->
+        <div id="youtubeContainer" style="margin: 15px 0; border-radius: 20px; overflow: hidden; box-shadow: 0 0 15px var(--neon-blue);">
+            <div id="youtubePlayer"></div>
+        </div>
+        <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 5px;">Pressione play no vídeo para iniciar a música e a letra.</p>
+
+        <!-- CONTROLES DE SINCRONIA MANUAL -->
+        <div id="controlesSincronia" style="display: none; justify-content: center; gap: 10px; margin: 15px 0;">
+            <button onclick="ajustarSincronia(-5)" class="btn" style="padding: 5px 15px; font-size: 0.8rem; background: var(--dark-bg-2);">-5s</button>
+            <button onclick="ajustarSincronia(-1)" class="btn" style="padding: 5px 15px; font-size: 0.8rem; background: var(--dark-bg-2);">-1s</button>
+            <span id="displaySincronia" style="font-size: 1rem; align-self: center; font-weight: bold; color: var(--neon-yellow); min-width: 50px;">0.0s</span>
+            <button onclick="ajustarSincronia(1)" class="btn" style="padding: 5px 15px; font-size: 0.8rem; background: var(--dark-bg-2);">+1s</button>
+            <button onclick="ajustarSincronia(5)" class="btn" style="padding: 5px 15px; font-size: 0.8rem; background: var(--dark-bg-2);">+5s</button>
+        </div>
 
         <!-- NOME -->
         <p id="nomeUsuario"></p>
