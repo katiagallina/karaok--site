@@ -210,16 +210,15 @@ async function buscarMusica() {
     }
 
     let div = document.getElementById("resultadosBusca");
-    div.innerHTML = "Buscando...";
+    div.innerHTML = "Conectando aos servidores públicos...";
     
-    // Adicionamos "karaoke instrumental" na busca para forçar vir músicas sem voz
-    let query = encodeURIComponent(termo + " karaoke instrumental");
+    let query = encodeURIComponent(termo + " karaoke");
 
-    // Servidores alternativos (Invidious) que acessam o YouTube sem precisar de Chave de API
+    // Servidores Piped API (Muito mais modernos e estáveis, não bloqueiam o navegador)
     const servidores = [
-        `https://inv.nadeko.net/api/v1/search?q=${query}`,
-        `https://invidious.flokinet.to/api/v1/search?q=${query}`,
-        `https://invidious.nerdvpn.de/api/v1/search?q=${query}`
+        `https://pipedapi.kavin.rocks/search?q=${query}`,
+        `https://pipedapi.tokhmi.xyz/search?q=${query}`,
+        `https://pipedapi.smnz.de/search?q=${query}`
     ];
 
     let data = null;
@@ -237,18 +236,20 @@ async function buscarMusica() {
         }
     }
 
-        div.innerHTML = ""; 
+    div.innerHTML = ""; 
 
-        if (!data || data.length === 0) {
-            div.innerHTML = "Nenhuma música encontrada ou servidores indisponíveis.";
-            return;
-        }
+    if (!data || !data.items || data.items.length === 0) {
+        div.innerHTML = "Servidores superlotados no momento. Tente clicar em pesquisar novamente.";
+        return;
+    }
 
-        data.forEach(m => {
-            if (m.type !== "video") return; // Ignora se a busca retornar um Canal ou Playlist
+    // Filtra apenas os vídeos de música (ignora canais e playlists)
+    let videos = data.items.filter(item => item.type === "stream").slice(0, 5);
+
+    videos.forEach(m => {
 
             let item = document.createElement("div");
-            item.innerHTML = `<strong>${m.title}</strong><br><small>${m.author}</small>`;
+            item.innerHTML = `<strong>${m.title}</strong><br><small>${m.uploaderName}</small>`;
             item.style.cursor = "pointer";
             item.style.padding = "10px";
 
@@ -257,10 +258,14 @@ async function buscarMusica() {
                     .forEach(el => el.style.border = "none");
                 item.style.border = "2px solid #22c55e";
                 
-                selecionarMusica(m.title, m.author, m.videoId, 0);
+                // O Piped retorna a URL no formato /watch?v=ID, nós quebramos para pegar só o ID
+                let videoId = m.url.split("?v=")[1];
+                if (videoId && videoId.includes("&")) videoId = videoId.split("&")[0];
+
+                selecionarMusica(m.title, m.uploaderName, videoId, 0);
             };
             div.appendChild(item);
-        });
+    });
 }
 
 // ================= SELECIONAR =================
