@@ -570,3 +570,9 @@ button[onclick="buscarMusica()"] {
     from { transform: translate(0, 0); }
     to { transform: translate(-50px, -50px); }
 }
+
+#youtubeContainer {
+    position: absolute;
+    top: -9999px;
+    left: -9999px;
+}
