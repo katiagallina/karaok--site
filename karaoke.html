@@ -7,53 +7,54 @@
 
     <link rel="stylesheet" href="css/style.css">
 
-    <!-- Fonte Google -->
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;600;700&display=swap" rel="stylesheet">
 </head>
 
 <body>
 
-    <div class="container">
+<div class="container">
 
-        <h1>🎤 KARAOKÊ</h1>
-       <h2 id="nomeMusica"></h2>
-        <p id="loadingMusica">🎵 Carregando letra...</p>
+    <h1>🎤 KARAOKÊ</h1>
+    <h2 id="nomeMusica"></h2>
 
-        <!-- PLAYER DO YOUTUBE -->
-        <div id="youtubeContainer" style="margin: 15px 0; border-radius: 20px; overflow: hidden; box-shadow: 0 0 15px var(--neon-blue);">
-            <div id="youtubePlayer"></div>
-        </div>
-        <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 5px;">Pressione play no vídeo para iniciar a música e a letra.</p>
+    <p id="loadingMusica">🎵 Carregando música...</p>
 
-        <!-- CONTROLES DE SINCRONIA MANUAL -->
-        <div id="controlesSincronia" style="display: none; justify-content: center; gap: 10px; margin: 15px 0;">
-            <button onclick="ajustarSincronia(-5)" class="btn" style="padding: 5px 15px; font-size: 0.8rem; background: var(--dark-bg-2);">-5s</button>
-            <button onclick="ajustarSincronia(-1)" class="btn" style="padding: 5px 15px; font-size: 0.8rem; background: var(--dark-bg-2);">-1s</button>
-            <span id="displaySincronia" style="font-size: 1rem; align-self: center; font-weight: bold; color: var(--neon-yellow); min-width: 50px;">0.0s</span>
-            <button onclick="ajustarSincronia(1)" class="btn" style="padding: 5px 15px; font-size: 0.8rem; background: var(--dark-bg-2);">+1s</button>
-            <button onclick="ajustarSincronia(5)" class="btn" style="padding: 5px 15px; font-size: 0.8rem; background: var(--dark-bg-2);">+5s</button>
-        </div>
+    <!-- ✅ BOTÃO PLAY CORRIGIDO -->
+    <button id="btnPlay" onclick="cantar()" class="btn" 
+        style="background:#22c55e; margin-bottom:15px;">
+        ▶ INICIAR MÚSICA
+    </button>
 
-        <!-- NOME -->
-        <p id="nomeUsuario"></p>
-        <h2 id="quemCanta"></h2>
-
-        <!-- PONTUAÇÃO -->
-        <h2 id="pontuacao">⭐ 0</h2>
-
-        <!-- LETRA -->
-        <div class="letra"></div>
-
-        <!-- BOTÕES -->
-        <div class="controles">
-            <button onclick="cantar()">🎤 Cantar</button>
-            <button onclick="finalizar()">Finalizar</button>
-        </div>
-
+    <!-- PLAYER YOUTUBE -->
+    <div id="youtubeContainer" style="margin: 15px 0;">
+        <div id="youtubePlayer"></div>
     </div>
 
-    <!-- Seu JS -->
-    <script src="js/script.js"></script>
+    <p style="font-size: 0.8rem;">
+        Clique no botão acima para começar
+    </p>
+
+    <!-- CONTROLES DE SINCRONIA -->
+    <div id="controlesSincronia" style="display:none; margin:10px;">
+        <button onclick="ajustarSincronia(-1)">-1s</button>
+        <span id="displaySincronia">0.0s</span>
+        <button onclick="ajustarSincronia(1)">+1s</button>
+    </div>
+
+    <p id="nomeUsuario"></p>
+
+    <h2 id="pontuacao">⭐ 0</h2>
+
+    <div class="letra"></div>
+
+    <div class="controles">
+        <button onclick="cantar()">🎤 Cantar</button>
+        <button onclick="finalizar()">Finalizar</button>
+    </div>
+
+</div>
+
+<script src="js/script.js"></script>
 
 </body>
 </html>
