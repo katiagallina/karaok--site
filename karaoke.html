@@ -12,45 +12,29 @@
 
 <body>
 
-<div class="container">
-
+    <div class="container">
     <h1>🎤 KARAOKÊ</h1>
-    <h2 id="nomeMusica"></h2>
+    <h2 id="nomeMusica">Carregando...</h2>
 
-    <p id="loadingMusica">🎵 Carregando música...</p>
+    <p id="loadingMusica">🎵 Prepare a voz!</p>
 
-    <!-- ✅ BOTÃO PLAY CORRIGIDO -->
-    <button id="btnPlay" onclick="cantar()" class="btn" 
-        style="background:#22c55e; margin-bottom:15px;">
-        ▶ INICIAR MÚSICA
-    </button>
-
-    <!-- PLAYER YOUTUBE -->
-    <div id="youtubeContainer" style="margin: 15px 0;">
+    <div id="youtubeContainer" style="margin: 15px 0; background: #000; border-radius: 10px; overflow: hidden;">
         <div id="youtubePlayer"></div>
     </div>
 
-    <p style="font-size: 0.8rem;">
-        Clique no botão acima para começar
-    </p>
-
-    <!-- CONTROLES DE SINCRONIA -->
-    <div id="controlesSincronia" style="display:none; margin:10px;">
-        <button onclick="ajustarSincronia(-1)">-1s</button>
-        <span id="displaySincronia">0.0s</span>
-        <button onclick="ajustarSincronia(1)">+1s</button>
+    <div class="controles">
+        <button id="btnPlay" onclick="cantar()" class="btn" style="background:#22c55e; padding: 15px 30px; font-size: 1.2rem;">
+            ▶ COMEÇAR A CANTAR
+        </button>
+        
+        <button onclick="finalizar()" class="btn" style="background:#ef4444;">Finalizar</button>
     </div>
 
     <p id="nomeUsuario"></p>
-
     <h2 id="pontuacao">⭐ 0</h2>
 
+ 
     <div class="letra"></div>
-
-    <div class="controles">
-        <button onclick="cantar()">🎤 Cantar</button>
-        <button onclick="finalizar()">Finalizar</button>
-    </div>
 
 </div>
 
