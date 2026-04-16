@@ -45,9 +45,9 @@ body {
     padding: 40px;
     border-radius: 20px;
     text-align: center;
-    width: 90vw;
-    max-width: 1200px;
-    min-height: 85vh;
+    width: 85vw;
+    max-width: 1000px;
+    min-height: 75vh;
     max-height: 90vh;
     overflow-y: auto;
     scrollbar-gutter: stable;
@@ -755,10 +755,10 @@ button[onclick="buscarMusica()"] {
 
 /* Karaoke sync refinado */
 .letra {
-    max-height: 55vh;
+    max-height: 50vh;
     min-height: 40vh;
     width: 100%;
-    max-width: 1000px;
+    max-width: 850px;
     padding: 56px 18px 72px;
     background: radial-gradient(circle at top, rgba(0, 229, 255, 0.08), transparent 45%), rgba(0, 0, 0, 0.32);
     border-radius: 18px;
