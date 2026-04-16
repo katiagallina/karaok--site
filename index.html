@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="pt-br">
+
 <head>
     <meta charset="UTF-8">
     <title>Karaokê</title>
@@ -12,43 +13,52 @@
 
 <body>
 
-<!-- PARTÍCULAS -->
-<div class="particles"></div>
+    <!-- PARTÍCULAS -->
+    <div class="particles"></div>
 
-<div class="container inicio">
+    <div class="container inicio">
 
-    <!-- LOGO -->
-    <h1 class="logo">🎤 KARAOKÊ</h1>
+        <!-- LOGO -->
+        <h1 class="logo">🎤 KARAOKÊ</h1>
 
-    <!-- FRASE -->
-    <p class="frase">Solte a voz e brilhe no palco ✨</p>
+        <!-- FRASE -->
+        <p class="frase">Solte a voz e brilhe no palco ✨</p>
 
-    <!-- DESCRIÇÃO -->
-    <p class="descricao">
-        Cante suas músicas favoritas, desafie amigos e conquiste o topo do ranking!
-    </p>
+        <!-- DESCRIÇÃO -->
+        <p class="descricao">
+            Cante suas músicas favoritas, desafie amigos e conquiste o topo do ranking!
+        </p>
 
-    <!-- BOTÃO -->
-    <div class="botoes">
-        <a href="menu.html" class="btn iniciar">
-            🎤 CANTAR AGORA
-        </a>
+        <!-- BOTÃO -->
+        <div class="botoes">
+            <a href="menu.html" class="btn iniciar">
+                🎤 CANTAR AGORA
+            </a>
+        </div>
+
     </div>
 
-</div>
+    <!-- ÁUDIO DE FUNDO -->
+    <audio id="bgMusic" loop>
+        <source src="audios/bg.mp3" type="audio/mpeg">
+    </audio>
 
-<!-- ÁUDIO DE FUNDO -->
-<audio id="bgMusic" loop>
-    <source src="audios/bg.mp3" type="audio/mpeg">
-</audio>
+    <script>
+        // Tocar música ao clicar
+        document.querySelector(".btn.iniciar").addEventListener("click", function (event) {
+            event.preventDefault(); // Impede a mudança de página imediata
 
-<script>
-    // Tocar música ao clicar
-    document.querySelector(".btn.iniciar").addEventListener("click", () => {
-        let audio = document.getElementById("bgMusic");
-        audio.play().catch(() => {});
-    });
-</script>
+            const urlDestino = this.getAttribute("href"); // Salva o link de forma segura
+            let audio = document.getElementById("bgMusic");
+            audio.play().catch(() => { });
+
+            // Aguarda 500ms (meio segundo) antes de redirecionar
+            setTimeout(() => {
+                window.location.href = urlDestino;
+            }, 500);
+        });
+    </script>
 
 </body>
+
 </html>

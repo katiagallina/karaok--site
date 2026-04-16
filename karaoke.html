@@ -1,44 +1,56 @@
-<!DOCTYPE html>
+﻿﻿<!DOCTYPE html>
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Karaokê</title>
-
+    <title>Karaoke</title>
     <link rel="stylesheet" href="css/style.css">
-
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;600;700&display=swap" rel="stylesheet">
 </head>
-
 <body>
 
-    <div class="container">
-    <h1>🎤 KARAOKÊ</h1>
-    <h2 id="nomeMusica">Carregando...</h2>
+<!-- Player YouTube invisivel mas na tela (evita bloqueio do navegador) -->
+<div id="youtubePlayer"></div>
 
-    <p id="loadingMusica">🎵 Prepare a voz!</p>
+<div class="container">
+    <h1>&#127908; KARAOKE</h1>
+    <h2 id="nomeMusica" style="font-size:1rem;margin-bottom:5px;">Carregando...</h2>
+    <p id="nomeUsuario" style="color:var(--text-muted);margin-bottom:10px;"></p>
 
-    <div id="youtubeContainer" style="margin: 15px 0; background: #000; border-radius: 10px; overflow: hidden;">
-        <div id="youtubePlayer"></div>
+    <p id="loadingMusica" style="margin-bottom:10px;">&#127925; Carregando audio...</p>
+    <div id="statusSincronia" class="status-sincronia" aria-hidden="true">Preparando sincronizacao da letra...</div>
+
+    <!-- Mini player de audio customizado -->
+    <div class="audio-player">
+        <div class="audio-progress-wrap" id="progressWrap">
+            <div class="audio-progress" id="audioProgress"></div>
+        </div>
+        <div class="audio-time">
+            <span id="tempoAtual">0:00</span>
+            <span id="tempoDuracao">0:00</span>
+        </div>
+        <div class="audio-controls">
+            <button id="btnPlay" onclick="cantar()" class="audio-btn-play">
+                &#9654; COMECAR A CANTAR
+            </button>
+            <button onclick="pausarResumir()" id="btnPausar" class="audio-btn-pause" style="display:none;">
+                &#9646;&#9646; Pausar
+            </button>
+        </div>
     </div>
 
-    <div class="controles">
-        <button id="btnPlay" onclick="cantar()" class="btn" style="background:#22c55e; padding: 15px 30px; font-size: 1.2rem;">
-            ▶ COMEÇAR A CANTAR
-        </button>
-        
-        <button onclick="finalizar()" class="btn" style="background:#ef4444;">Finalizar</button>
-    </div>
+    <!-- Pontuacao -->
+    <h2 id="pontuacao" style="font-size:2.5rem;margin:8px 0;color:var(--neon-yellow);text-shadow:0 0 15px var(--neon-yellow);">&#11088; 0</h2>
 
-    <p id="nomeUsuario"></p>
-    <h2 id="pontuacao">⭐ 0</h2>
+    <!-- Botao finalizar -->
+    <button onclick="finalizar()" class="btn" style="background:linear-gradient(45deg,#dc2626,#ef4444);box-shadow:0 0 15px #ef4444;margin-bottom:15px;">
+        &#9209; Finalizar
+    </button>
 
- 
-    <div class="letra"></div>
-
+    <!-- Letra -->
+    <div class="letra" id="divLetra"></div>
 </div>
 
 <script src="js/script.js"></script>
-
 </body>
 </html>

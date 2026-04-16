@@ -7,6 +7,10 @@
     box-sizing: border-box;
 }
 
+html {
+    overflow: hidden;
+}
+
 :root {
     --neon-blue: #00e5ff;
     --neon-green: #22c55e;
@@ -27,7 +31,8 @@ body {
     justify-content: center;
     align-items: center;
     color: white;
-    overflow: hidden; /* Evita scrollbars de glows */
+    overflow: hidden;
+    /* Evita scrollbars de glows */
 }
 
 /* CONTAINER - Glassmorphism */
@@ -40,20 +45,35 @@ body {
     padding: 40px;
     border-radius: 20px;
     text-align: center;
-    width: 480px;
-    max-width: 95%;
+    width: 90vw;
+    max-width: 1200px;
+    min-height: 85vh;
     max-height: 90vh;
     overflow-y: auto;
+    scrollbar-gutter: stable;
     position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Esconde o player do YouTube desde o momento zero para evitar tremedeira na tela */
+#youtubePlayer {
+    position: absolute;
+    top: -9999px;
+    left: -9999px;
 }
 
 /* Custom Scrollbar */
 .container::-webkit-scrollbar {
     width: 5px;
 }
+
 .container::-webkit-scrollbar-track {
     background: transparent;
 }
+
 .container::-webkit-scrollbar-thumb {
     background: var(--neon-blue);
     border-radius: 10px;
@@ -86,6 +106,8 @@ p {
     flex-direction: column;
     gap: 15px;
     margin-top: 20px;
+    width: 100%;
+    max-width: 500px;
 }
 
 .btn {
@@ -124,12 +146,25 @@ p {
 
 .btn:hover {
     transform: scale(1.05) translateY(-2px);
-    box-shadow: 0 0 25px var(--glow-color, #fff); /* Fallback color */
+    box-shadow: 0 0 25px var(--glow-color, #fff);
+    /* Fallback color */
 }
-.btn.livre:hover { --glow-color: var(--neon-green); }
-.btn.desafio:hover { --glow-color: var(--neon-red); }
-.btn.ranking:hover { --glow-color: var(--neon-yellow); }
-.btn.confirm:hover { --glow-color: var(--neon-blue); }
+
+.btn.livre:hover {
+    --glow-color: var(--neon-green);
+}
+
+.btn.desafio:hover {
+    --glow-color: var(--neon-red);
+}
+
+.btn.ranking:hover {
+    --glow-color: var(--neon-yellow);
+}
+
+.btn.confirm:hover {
+    --glow-color: var(--neon-blue);
+}
 
 /* CAMPOS DE INPUT */
 .campo {
@@ -139,12 +174,15 @@ p {
     align-items: flex-start;
     text-align: left;
     width: 100%;
+    max-width: 500px;
 }
+
 .campo label {
     margin-bottom: 8px;
     font-weight: 600;
     color: var(--neon-blue);
 }
+
 .campo input {
     padding: 12px 20px;
     border-radius: 50px;
@@ -154,6 +192,7 @@ p {
     color: var(--text-light);
     font-size: 1rem;
 }
+
 .campo input:focus {
     outline: none;
     box-shadow: 0 0 10px var(--neon-blue);
@@ -169,6 +208,7 @@ button.btn {
     color: var(--neon-blue);
     transition: 0.3s;
 }
+
 button.btn:hover {
     background: var(--neon-blue);
     color: var(--dark-bg-1);
@@ -183,42 +223,46 @@ button.btn:hover {
     text-shadow: 0 0 10px var(--neon-yellow), 0 0 25px var(--neon-yellow), 0 0 40px var(--neon-yellow);
     transition: transform 0.1s ease-in-out;
 }
+
 .letra {
     margin: 20px 0;
-    line-height: 2.2;
-    max-height: 220px;
-    overflow-y: auto;
-    padding: 20px;
-    background: rgba(0, 0, 0, 0.3);
+    line-height: 1.6;
     margin-top: 10px;
     border-radius: 15px;
-    border: 1px solid rgba(0, 229, 255, 0.2);
     font-size: 1.1rem;
 }
-.letra::-webkit-scrollbar { display: none; } /* Esconde scrollbar da letra */
+
+.letra::-webkit-scrollbar {
+    display: none;
+}
+
+/* Esconde scrollbar da letra */
 
 .letra p {
     padding: 5px;
     border-radius: 5px;
     margin-bottom: 5px;
 }
+
 .letra p {
     transition: all 0.3s ease;
 }
 
 .ativa {
-    font-weight: 700;
-    position: relative;
-    z-index: 1;
+    font-weight: 700 !important;
+    color: var(--neon-yellow) !important;
+    text-shadow: 0 0 15px var(--neon-yellow), 0 0 25px var(--neon-yellow) !important;
+    background: rgba(250, 204, 21, 0.2) !important;
+    padding: 8px 10px !important;
+    border-radius: 5px !important;
+    transform: scale(1.08);
+    display: block !important;
 }
 
 .ativa::before {
-    content: "";
-    position: absolute;
-    top: 0; left: 0; right: 0; bottom: 0;
-    background: rgba(0, 229, 255, 0.1);
-    border-radius: 5px;
-    z-index: -1;
+    content: "▶ ";
+    margin-right: 5px;
+    font-size: 0.9rem;
 }
 
 /* Sincronização por palavra */
@@ -238,6 +282,7 @@ button.btn:hover {
     gap: 20px;
     margin-top: 20px;
 }
+
 .controles button {
     padding: 12px 25px;
     border-radius: 50px;
@@ -252,16 +297,21 @@ button.btn:hover {
     justify-content: center;
     gap: 8px;
 }
-.controles button:nth-child(2) { /* Cantar */
+
+.controles button:nth-child(2) {
+    /* Cantar */
     background: linear-gradient(45deg, #00b8d4, var(--neon-blue));
     color: var(--dark-bg-1);
     box-shadow: 0 0 20px var(--neon-blue);
 }
-.controles button:nth-child(3) { /* Finalizar */
+
+.controles button:nth-child(3) {
+    /* Finalizar */
     background: linear-gradient(45deg, #16a34a, var(--neon-green));
     color: #fff;
     box-shadow: 0 0 20px var(--neon-green);
 }
+
 .controles button:hover {
     transform: scale(1.05);
 }
@@ -270,6 +320,7 @@ button.btn:hover {
 .player-interface {
     margin: 15px 0;
 }
+
 .progress-bar-container {
     display: flex;
     align-items: center;
@@ -278,6 +329,7 @@ button.btn:hover {
     color: var(--text-muted);
     font-size: 0.9rem;
 }
+
 .progress-bar {
     flex-grow: 1;
     height: 8px;
@@ -286,6 +338,7 @@ button.btn:hover {
     overflow: hidden;
     cursor: pointer;
 }
+
 .progress {
     width: 0%;
     height: 100%;
@@ -304,11 +357,13 @@ button.btn:hover {
     padding: 0 !important;
     font-size: 1.5rem;
 }
+
 #playPauseBtn:hover {
     background: var(--neon-blue);
     color: var(--dark-bg-1);
     box-shadow: 0 0 15px var(--neon-blue);
 }
+
 #playPauseBtn svg {
     margin: 0;
 }
@@ -318,7 +373,10 @@ button.btn:hover {
     list-style: none;
     margin-top: 20px;
     padding: 0;
+    width: 100%;
+    max-width: 500px;
 }
+
 #listaRanking li {
     background: rgba(0, 229, 255, 0.1);
     border: 1px solid rgba(0, 229, 255, 0.2);
@@ -328,10 +386,12 @@ button.btn:hover {
     font-size: 1.1rem;
     transition: 0.3s;
 }
+
 #listaRanking li:hover {
     transform: scale(1.02);
     background: rgba(0, 229, 255, 0.2);
 }
+
 #listaRanking li:first-child {
     background: rgba(250, 204, 21, 0.2);
     border-color: rgba(250, 204, 21, 0.5);
@@ -349,7 +409,9 @@ button.btn:hover {
     color: var(--neon-yellow);
     text-shadow: 0 0 20px var(--neon-yellow), 0 0 40px var(--neon-yellow);
 }
-#j1, #j2 {
+
+#j1,
+#j2 {
     font-size: 2rem;
     text-shadow: 0 0 10px var(--neon-blue), 0 0 20px var(--neon-blue);
 }
@@ -365,9 +427,17 @@ button.btn:hover {
 }
 
 @keyframes pulse {
-    0% { transform: scale(1); }
-    50% { transform: scale(1.05); }
-    100% { transform: scale(1); }
+    0% {
+        transform: scale(1);
+    }
+
+    50% {
+        transform: scale(1.05);
+    }
+
+    100% {
+        transform: scale(1);
+    }
 }
 
 #pontuacaoFinal {
@@ -376,10 +446,16 @@ button.btn:hover {
 }
 
 /* BUSCA DE MÚSICA */
+#resultadosBusca {
+    width: 100%;
+    max-width: 600px;
+}
+
 #resultadosBusca div {
     background: rgba(255, 255, 255, 0.1) !important;
     transition: 0.3s;
 }
+
 #resultadosBusca div:hover {
     background: rgba(0, 229, 255, 0.2) !important;
     border-left: 3px solid var(--neon-blue);
@@ -435,6 +511,7 @@ button[onclick="buscarMusica()"] {
     from {
         text-shadow: 0 0 10px var(--neon-blue), 0 0 20px var(--neon-blue);
     }
+
     to {
         text-shadow: 0 0 20px var(--neon-blue), 0 0 40px var(--neon-blue);
     }
@@ -445,6 +522,7 @@ button[onclick="buscarMusica()"] {
         opacity: 0;
         transform: scale(0.95);
     }
+
     to {
         opacity: 1;
         transform: scale(1);
@@ -456,6 +534,7 @@ button[onclick="buscarMusica()"] {
         opacity: 0;
         transform: translateY(20px);
     }
+
     to {
         opacity: 1;
         transform: translateY(0);
@@ -533,6 +612,7 @@ button[onclick="buscarMusica()"] {
     from {
         text-shadow: 0 0 10px var(--neon-blue), 0 0 20px var(--neon-blue);
     }
+
     to {
         text-shadow: 0 0 25px var(--neon-blue), 0 0 50px var(--neon-blue);
     }
@@ -543,6 +623,7 @@ button[onclick="buscarMusica()"] {
         opacity: 0;
         transform: scale(0.9);
     }
+
     to {
         opacity: 1;
         transform: scale(1);
@@ -554,6 +635,7 @@ button[onclick="buscarMusica()"] {
         opacity: 0;
         transform: translateY(30px);
     }
+
     to {
         opacity: 1;
         transform: translateY(0);
@@ -561,18 +643,221 @@ button[onclick="buscarMusica()"] {
 }
 
 @keyframes pulseBtn {
-    0% { transform: scale(1); }
-    50% { transform: scale(1.05); }
-    100% { transform: scale(1); }
+    0% {
+        transform: scale(1);
+    }
+
+    50% {
+        transform: scale(1.05);
+    }
+
+    100% {
+        transform: scale(1);
+    }
 }
 
 @keyframes moveParticles {
-    from { transform: translate(0, 0); }
-    to { transform: translate(-50px, -50px); }
+    from {
+        transform: translate(0, 0);
+    }
+
+    to {
+        transform: translate(-50px, -50px);
+    }
 }
 
-#youtubeContainer {
-    position: absolute;
-    top: -9999px;
-    left: -9999px;
+/* ============================================================
+   MINI PLAYER DE AUDIO
+   ============================================================ */
+.audio-player {
+    background: rgba(0, 0, 0, 0.35);
+    border: 1px solid rgba(0, 229, 255, 0.25);
+    border-radius: 15px;
+    padding: 15px 20px;
+    margin: 10px 0 15px;
+    width: 100%;
+    max-width: 800px;
+}
+
+.audio-progress-wrap {
+    width: 100%;
+    height: 8px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    overflow: hidden;
+    cursor: pointer;
+    margin-bottom: 6px;
+}
+
+.audio-progress {
+    height: 100%;
+    width: 0%;
+    background: var(--neon-blue);
+    border-radius: 10px;
+    box-shadow: 0 0 8px var(--neon-blue);
+    transition: width 0.5s linear;
+}
+
+.audio-time {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin-bottom: 12px;
+}
+
+.audio-controls {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+.audio-btn-play {
+    background: linear-gradient(45deg, #16a34a, var(--neon-green));
+    box-shadow: 0 0 20px var(--neon-green);
+    color: white;
+    border: none;
+    border-radius: 50px;
+    padding: 12px 25px;
+    font-size: 1rem;
+    font-weight: 700;
+    cursor: pointer;
+    font-family: "Poppins", sans-serif;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    transition: transform 0.2s;
+}
+
+.audio-btn-play:hover {
+    transform: scale(1.05);
+}
+
+.audio-btn-pause {
+    background: linear-gradient(45deg, #1d4ed8, #3b82f6);
+    box-shadow: 0 0 15px var(--neon-blue);
+    color: white;
+    border: none;
+    border-radius: 50px;
+    padding: 12px 25px;
+    font-size: 1rem;
+    font-weight: 700;
+    cursor: pointer;
+    font-family: "Poppins", sans-serif;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    transition: transform 0.2s;
+}
+
+.audio-btn-pause:hover {
+    transform: scale(1.05);
+}
+
+/* Karaoke sync refinado */
+.letra {
+    max-height: 55vh;
+    min-height: 40vh;
+    width: 100%;
+    max-width: 1000px;
+    padding: 56px 18px 72px;
+    background: radial-gradient(circle at top, rgba(0, 229, 255, 0.08), transparent 45%), rgba(0, 0, 0, 0.32);
+    border-radius: 18px;
+    border: 1px solid rgba(0, 229, 255, 0.22);
+    scroll-behavior: smooth;
+    overflow-anchor: none;
+}
+
+.letra-sync-painel {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+}
+
+.letra-sync-painel .sync-stack {
+    width: 100%;
+    min-height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 18px;
+}
+
+.letra-sync-painel .sync-linha {
+    text-align: center;
+    line-height: 1.55;
+    word-break: break-word;
+}
+
+.letra-sync-painel .sync-linha-anterior {
+    min-height: 3.1em;
+    color: rgba(255, 255, 255, 0.24);
+    font-size: 1rem;
+}
+
+.letra-sync-painel .sync-linha-atual {
+    --active-progress: 0%;
+    position: relative;
+    min-height: 3.2em;
+    padding: 18px 18px 20px;
+    border-radius: 18px;
+    background:
+        linear-gradient(90deg, rgba(0, 229, 255, 0.16), rgba(250, 204, 21, 0.08)),
+        rgba(255, 255, 255, 0.02);
+    box-shadow: inset 0 0 0 1px rgba(0, 229, 255, 0.12), 0 0 24px rgba(0, 229, 255, 0.1);
+    font-size: 1.8rem;
+    font-weight: 700;
+}
+
+.letra-sync-painel .sync-linha-atual .texto-fill {
+    background: linear-gradient(90deg,
+            #facc15 0%,
+            #facc15 var(--active-progress),
+            rgba(255, 255, 255, 0.3) var(--active-progress),
+            rgba(255, 255, 255, 0.3) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    color: transparent;
+    filter: drop-shadow(0 0 10px rgba(250, 204, 21, 0.4));
+}
+
+.letra-sync-painel .sync-linha-proxima {
+    min-height: 3.1em;
+    color: rgba(111, 240, 255, 0.92);
+    font-size: 1.3rem;
+}
+
+.letra-sync-painel .sync-linha-guia {
+    color: rgba(255, 255, 255, 0.44);
+    font-size: 0.95rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+.letra-sync-painel .sync-stack.preparando .sync-linha-proxima {
+    padding: 18px;
+    border-radius: 18px;
+    background: linear-gradient(90deg, rgba(0, 229, 255, 0.12), rgba(0, 229, 255, 0.04));
+    box-shadow: inset 0 0 0 1px rgba(0, 229, 255, 0.1);
+}
+
+.letra p {
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.status-sincronia {
+    display: none;
+}
+
+.status-sincronia {
+    display: none;
+    margin: 8px 0 14px;
+    padding: 10px 14px;
+    border-radius: 12px;
+    background: rgba(0, 0, 0, 0.26);
+    border: 1px solid rgba(0, 229, 255, 0.16);
+    color: var(--text-muted);
+    font-size: 0.92rem;
+    line-height: 1.5;
 }
