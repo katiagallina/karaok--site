@@ -1,5 +1,13 @@
 // Substitua o texto abaixo pela sua nova Chave de API gerada no Google Cloud Console
 const YOUTUBE_API_KEY = "AIzaSyBhpdlWVIHHVDOg9rRBWMc5uyAAcEoqazA";
+const SUPABASE_URL = "https://ybantvgcrelqwyvjkvsj.supabase.co";
+const SUPABASE_KEY = "sb_publishable_YOnl_Qc5PQ5o9229nVx8Yg_ArNvGUHS";
+const SUPABASE_TABLE = "ranking";
+const SUPABASE_REST_PATH = "/rest/v1";
+const RANKING_STORAGE_KEY = "rankingLocal";
+const RESULTADO_ATUAL_ID_KEY = "resultadoAtualId";
+const RESULTADO_PROCESSADO_KEY = "ultimoResultadoProcessado";
+const RESULTADO_REMOTO_KEY = "ultimoResultadoRemoto";
 
 let ytPlayer = null;
 let playerPronto = false;
@@ -14,15 +22,266 @@ let ultimoScrollLetraTs = 0;
 const yt = localStorage.getItem("musicaAudio");
 const pagina = window.location.pathname;
 
+function normalizarSupabaseUrl(url) {
+    return String(url || "").replace(/\/+$/, "").replace(/\/rest\/v1$/i, "");
+}
+
+function obterProjectIdSupabase(url) {
+    const match = normalizarSupabaseUrl(url).match(/^https:\/\/([a-z0-9-]+)\.supabase\.co$/i);
+    return match ? match[1] : "";
+}
+
+function validarConfiguracaoSupabase() {
+    const urlNormalizada = normalizarSupabaseUrl(SUPABASE_URL);
+    const projectId = obterProjectIdSupabase(urlNormalizada);
+    const usaChavePublica = /^sb_publishable_/i.test(SUPABASE_KEY);
+
+    if (urlNormalizada !== SUPABASE_URL) {
+        console.warn("[Supabase] A URL base deve ficar sem /rest/v1. Valor normalizado:", urlNormalizada);
+    }
+
+    if (!projectId) {
+        console.error("[Supabase] URL invalida. Use o formato https://SEU_PROJECT_ID.supabase.co");
+        return false;
+    }
+
+    if (!usaChavePublica) {
+        console.error("[Supabase] A chave configurada nao parece ser publishable. Nao exponha service_role no frontend.");
+        return false;
+    }
+
+    return true;
+}
+
+function montarUrlSupabase(path = "", query = "") {
+    const base = `${normalizarSupabaseUrl(SUPABASE_URL)}${SUPABASE_REST_PATH}`;
+    const caminho = path.startsWith("/") ? path : `/${path}`;
+    return query ? `${base}${caminho}?${query}` : `${base}${caminho}`;
+}
+
+function criarErroSupabase(contexto, resposta, detalhes = "") {
+    return new Error(`[Supabase:${contexto}] ${resposta.status} ${resposta.statusText}${detalhes ? ` - ${detalhes}` : ""}`);
+}
+
+function logErroPadrao(contexto, erro) {
+    console.error(`[${contexto}]`, erro);
+}
+
+function gerarResultadoAtualId() {
+    if (window.crypto && typeof window.crypto.randomUUID === "function") {
+        return window.crypto.randomUUID();
+    }
+
+    return `resultado-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function obterHeadersSupabase(extra = {}) {
+    return {
+        apikey: SUPABASE_KEY,
+        Authorization: `Bearer ${SUPABASE_KEY}`,
+        "Content-Type": "application/json",
+        ...extra
+    };
+}
+
+function getRankingLocal() {
+    try {
+        return JSON.parse(localStorage.getItem(RANKING_STORAGE_KEY) || "[]");
+    } catch (erro) {
+        logErroPadrao("Ranking local", erro);
+        return [];
+    }
+}
+
+function salvarRankingLocal(registro) {
+    const rankingAtual = getRankingLocal();
+    rankingAtual.push(registro);
+    rankingAtual.sort((a, b) => (b.pontuacao || 0) - (a.pontuacao || 0));
+    localStorage.setItem(RANKING_STORAGE_KEY, JSON.stringify(rankingAtual.slice(0, 20)));
+}
+
+function obterInicioDoDiaISO() {
+    const agora = new Date();
+    const inicio = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate(), 0, 0, 0, 0);
+    return inicio.toISOString();
+}
+
+async function inserirPontuacaoSupabase(registro) {
+    if (!validarConfiguracaoSupabase()) {
+        throw new Error("[Supabase:config] Configuracao invalida para inserir ranking.");
+    }
+
+    const resposta = await fetch(montarUrlSupabase(SUPABASE_TABLE), {
+        method: "POST",
+        headers: obterHeadersSupabase({ Prefer: "return=representation" }),
+        body: JSON.stringify([registro])
+    });
+
+    if (!resposta.ok) {
+        const erroTexto = await resposta.text();
+        throw criarErroSupabase("insert", resposta, erroTexto);
+    }
+
+    return resposta.json();
+}
+
+async function buscarRankingSupabase() {
+    if (!validarConfiguracaoSupabase()) {
+        throw new Error("[Supabase:config] Configuracao invalida para consultar ranking.");
+    }
+
+    const inicioDoDia = obterInicioDoDiaISO();
+    const query = `select=nome,pontuacao,musica,modo,created_at&modo=eq.livre&created_at=gte.${encodeURIComponent(inicioDoDia)}&order=pontuacao.desc,created_at.asc&limit=10`;
+    const resposta = await fetch(montarUrlSupabase(SUPABASE_TABLE, query), {
+        headers: obterHeadersSupabase()
+    });
+
+    if (!resposta.ok) {
+        const erroTexto = await resposta.text();
+        throw criarErroSupabase("select", resposta, erroTexto);
+    }
+
+    return resposta.json();
+}
+
+function obterPontuacaoAtual() {
+    const placar = document.getElementById("pontuacao");
+    return parseInt((placar?.innerText || "").replace(/\D/g, ""), 10) || 0;
+}
+
+function gerarAvaliacao(pontuacao) {
+    if (pontuacao >= 120) return "Performance brilhante! Voce dominou essa musica.";
+    if (pontuacao >= 80) return "Mandou muito bem! Sua pontuacao ficou excelente.";
+    if (pontuacao >= 40) return "Boa apresentacao! Da para buscar ainda mais pontos.";
+    return "Voce ja comecou cantando. Continue praticando para subir no ranking.";
+}
+
+function montarRegistroResultado() {
+    const pontuacao = localStorage.getItem("pontuacaoFinal");
+    const nome = localStorage.getItem("nome") || "Cantor(a)";
+    const musica = localStorage.getItem("musicaNome") || "Musica livre";
+    const resultadoId = localStorage.getItem(RESULTADO_ATUAL_ID_KEY) || gerarResultadoAtualId();
+
+    return {
+        nome,
+        musica,
+        modo: "livre",
+        pontuacao: parseInt(pontuacao || "0", 10) || 0,
+        resultadoId,
+        created_at: new Date().toISOString()
+    };
+}
+
+async function sincronizarResultadoLivre() {
+    const registro = montarRegistroResultado();
+    const resultadoId = registro.resultadoId;
+    const ultimoProcessado = localStorage.getItem(RESULTADO_PROCESSADO_KEY);
+    const ultimoRemoto = localStorage.getItem(RESULTADO_REMOTO_KEY);
+
+    if (ultimoProcessado === resultadoId) {
+        return { remoto: ultimoRemoto === resultadoId, duplicado: true };
+    }
+
+    const { resultadoId: _resultadoId, ...registroPersistido } = registro;
+    salvarRankingLocal(registroPersistido);
+    localStorage.setItem(RESULTADO_PROCESSADO_KEY, resultadoId);
+
+    try {
+        await inserirPontuacaoSupabase(registroPersistido);
+        localStorage.setItem(RESULTADO_REMOTO_KEY, resultadoId);
+        return { remoto: true };
+    } catch (erro) {
+        logErroPadrao("Supabase ranking insert", erro);
+        return { remoto: false, erro };
+    }
+}
+
+function renderizarRanking(lista, origem = "local") {
+    const ul = document.getElementById("listaRanking");
+    if (!ul) return;
+
+    if (!Array.isArray(lista) || lista.length === 0) {
+        ul.innerHTML = "<li>Nenhuma pontuacao registrada ainda.</li>";
+        return;
+    }
+
+    ul.innerHTML = lista.map((item, index) => {
+        const nome = escaparHtml(item.nome || "Cantor(a)");
+        const musica = item.musica ? `<br><small>${escaparHtml(item.musica)}</small>` : "";
+        const selo = index === 0 && origem === "supabase" ? " 🌟" : "";
+        return `<li><strong>${index + 1}. ${nome}</strong> - ${item.pontuacao || 0} pts${selo}${musica}</li>`;
+    }).join("");
+}
+
+function inicializarPaginaResultado() {
+    const nomeFinal = document.getElementById("nomeFinal");
+    const pontuacaoFinal = document.getElementById("pontuacaoFinal");
+    const avaliacao = document.getElementById("avaliacao");
+    const nome = localStorage.getItem("nome") || "Cantor(a)";
+    const musica = localStorage.getItem("musicaNome") || "";
+    const pontuacao = parseInt(localStorage.getItem("pontuacaoFinal") || "0", 10) || 0;
+
+    if (nomeFinal) {
+        nomeFinal.innerText = musica ? `${nome} cantou: ${musica}` : nome;
+    }
+
+    if (pontuacaoFinal) {
+        pontuacaoFinal.innerHTML = `&#11088; ${pontuacao}`;
+    }
+
+    if (avaliacao) {
+        avaliacao.innerText = gerarAvaliacao(pontuacao);
+    }
+
+    if ((localStorage.getItem("modoAtual") || "livre") === "livre") {
+        sincronizarResultadoLivre().then((resultado) => {
+            if (!avaliacao) return;
+            if (resultado.remoto) {
+                avaliacao.innerText += " Resultado sincronizado com o ranking online.";
+            } else {
+                avaliacao.innerText += " Resultado salvo localmente enquanto o ranking online nao responde.";
+            }
+        });
+    }
+}
+
+async function inicializarPaginaRanking() {
+    const local = getRankingLocal()
+        .filter((item) => item.modo === "livre")
+        .sort((a, b) => (b.pontuacao || 0) - (a.pontuacao || 0))
+        .slice(0, 10);
+
+    renderizarRanking(local, "local");
+
+    try {
+        const remoto = await buscarRankingSupabase();
+        if (Array.isArray(remoto) && remoto.length > 0) {
+            renderizarRanking(remoto, "supabase");
+        }
+    } catch (erro) {
+        logErroPadrao("Supabase ranking select", erro);
+    }
+}
+
 // ============================================================
 // INICIALIZACAO GERAL (EVENTOS)
 // ============================================================
 window.addEventListener("DOMContentLoaded", () => {
+    validarConfiguracaoSupabase();
+
     let inputBusca = document.getElementById("buscaMusica");
     if (inputBusca) {
         inputBusca.addEventListener("keypress", (e) => {
             if (e.key === "Enter") buscarMusica();
         });
+    }
+
+    if (pagina.endsWith("resultado.html")) {
+        inicializarPaginaResultado();
+    }
+
+    if (pagina.endsWith("ranking.html")) {
+        inicializarPaginaRanking();
     }
 });
 
@@ -167,6 +426,8 @@ function finalizar() {
         ytPlayer.stopVideo();
     }
 
+    localStorage.setItem("pontuacaoFinal", String(obterPontuacaoAtual()));
+    localStorage.setItem(RESULTADO_ATUAL_ID_KEY, gerarResultadoAtualId());
     clearInterval(syncInterval);
     clearInterval(progressInterval);
     clearInterval(pontuacaoInterval);
