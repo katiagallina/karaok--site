@@ -42,13 +42,12 @@ body {
     -webkit-backdrop-filter: blur(10px);
     border: 1px solid rgba(0, 229, 255, 0.2);
     box-shadow: 0 0 40px rgba(0, 0, 0, 0.5);
-    padding: 40px;
+    padding: 32px;
     border-radius: 20px;
     text-align: center;
-    width: 85vw;
-    max-width: 1000px;
-    min-height: 75vh;
-    max-height: 90vh;
+    width: min(84vw, 920px);
+    min-height: 72vh;
+    max-height: 88vh;
     overflow-y: auto;
     scrollbar-gutter: stable;
     position: relative;
@@ -83,7 +82,7 @@ body {
 h1 {
     margin-bottom: 10px;
     font-weight: 700;
-    font-size: 2.5rem;
+    font-size: clamp(2rem, 3vw, 2.8rem);
     color: var(--text-light);
     text-shadow: 0 0 5px var(--neon-blue), 0 0 15px var(--neon-blue), 0 0 25px var(--neon-blue);
 }
@@ -97,22 +96,23 @@ h2 {
 /* SUBTEXTO */
 p {
     color: var(--text-muted);
-    margin-bottom: 25px;
+    margin-bottom: 20px;
+    font-size: 0.98rem;
 }
 
 /* BOTÕES PRINCIPAIS */
 .botoes {
     display: flex;
     flex-direction: column;
-    gap: 15px;
-    margin-top: 20px;
+    gap: 13px;
+    margin-top: 16px;
     width: 100%;
-    max-width: 400px;
+    max-width: 360px;
 }
 
 .btn {
     text-decoration: none;
-    padding: 12px;
+    padding: 11px 18px;
     border-radius: 50px;
     font-weight: 600;
     transition: all 0.3s ease;
@@ -120,8 +120,8 @@ p {
     border: none;
     color: var(--text-light);
     text-transform: uppercase;
-    letter-spacing: 1px;
-    font-size: 1rem;
+    letter-spacing: 0.6px;
+    font-size: 0.92rem;
 }
 
 .btn.livre {
@@ -479,13 +479,13 @@ button[onclick="buscarMusica()"] {
 
 /* LOGO ANIMADA */
 .logo {
-    font-size: 3rem;
+    font-size: clamp(2.2rem, 4vw, 3rem);
     animation: glow 2s infinite alternate;
 }
 
 /* FRASE */
 .frase {
-    font-size: 1.2rem;
+    font-size: 1.05rem;
     margin-top: 10px;
     color: var(--text-muted);
     animation: slideUp 1s ease;
@@ -494,7 +494,7 @@ button[onclick="buscarMusica()"] {
 /* DESCRIÇÃO */
 .descricao {
     margin-top: 10px;
-    font-size: 0.95rem;
+    font-size: 0.92rem;
     color: var(--text-muted);
     animation: slideUp 1.5s ease;
 }
@@ -503,7 +503,7 @@ button[onclick="buscarMusica()"] {
 .btn.iniciar {
     background: linear-gradient(45deg, #00e5ff, #3b82f6);
     box-shadow: 0 0 20px var(--neon-blue);
-    font-size: 1.1rem;
+    font-size: 1rem;
 }
 
 /* ANIMAÇÕES */
@@ -579,13 +579,13 @@ button[onclick="buscarMusica()"] {
 
 /* LOGO */
 .logo {
-    font-size: 3rem;
+    font-size: clamp(2.2rem, 4vw, 3rem);
     animation: glow 2s infinite alternate;
 }
 
 /* FRASE */
 .frase {
-    font-size: 1.2rem;
+    font-size: 1.05rem;
     margin-top: 10px;
     color: var(--text-muted);
     animation: slideUp 1s ease;
@@ -594,7 +594,7 @@ button[onclick="buscarMusica()"] {
 /* DESCRIÇÃO */
 .descricao {
     margin-top: 10px;
-    font-size: 0.95rem;
+    font-size: 0.92rem;
     color: var(--text-muted);
     animation: slideUp 1.5s ease;
 }
@@ -603,7 +603,7 @@ button[onclick="buscarMusica()"] {
 .btn.iniciar {
     background: linear-gradient(45deg, #00e5ff, #3b82f6);
     box-shadow: 0 0 25px var(--neon-blue);
-    font-size: 1.2rem;
+    font-size: 1rem;
     animation: pulseBtn 2s infinite;
 }
 
@@ -860,4 +860,54 @@ button[onclick="buscarMusica()"] {
     color: var(--text-muted);
     font-size: 0.92rem;
     line-height: 1.5;
+}
+
+@media (min-width: 1024px) {
+    .container {
+        width: min(78vw, 900px);
+        padding: 28px 32px;
+        min-height: 68vh;
+    }
+
+    .botoes {
+        max-width: 340px;
+    }
+
+    .btn {
+        font-size: 0.88rem;
+        padding: 10px 16px;
+    }
+
+    .container > p:first-of-type {
+        font-size: 0.94rem;
+        margin-bottom: 18px;
+    }
+}
+
+@media (max-width: 640px) {
+    .container {
+        width: calc(100vw - 32px);
+        min-height: auto;
+        padding: 24px 18px;
+    }
+
+    h1,
+    .logo {
+        font-size: clamp(1.9rem, 8vw, 2.4rem);
+    }
+
+    p,
+    .frase,
+    .descricao {
+        font-size: 0.9rem;
+    }
+
+    .botoes {
+        max-width: 100%;
+    }
+
+    .btn {
+        font-size: 0.86rem;
+        padding: 10px 14px;
+    }
 }
