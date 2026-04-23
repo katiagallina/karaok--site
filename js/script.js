@@ -362,19 +362,15 @@ function renderizarListaMusicas(items, div) {
         item.dataset.title = m.snippet.title;
         item.innerHTML = `<strong>${m.snippet.title}</strong>`;
         item.className = "resultado-item";
-        item.style.cursor = "pointer";
-        item.style.padding = "12px";
 
         item.onclick = () => {
             document.querySelectorAll(".resultado-item").forEach((el) => {
-                el.style.borderLeft = "none";
-                el.style.background = "";
+                el.classList.remove("selecionado");
                 el.innerHTML = `<strong>${el.dataset.title}</strong>`;
             });
 
-            item.style.borderLeft = "4px solid var(--neon-green)";
-            item.style.background = "rgba(34, 197, 94, 0.2)";
-            item.innerHTML = `<strong>${m.snippet.title}</strong> <span style="color:var(--neon-green); float:right; font-size:1.2rem;">OK</span>`;
+            item.classList.add("selecionado");
+            item.innerHTML = `<strong>${m.snippet.title}</strong> <span class="resultado-ok">OK</span>`;
             selecionarMusica(m.snippet.title, m.snippet.channelTitle || "Karaoke", m.id.videoId);
         };
 
@@ -383,7 +379,7 @@ function renderizarListaMusicas(items, div) {
 }
 
 function mostrarResultadosFallback(div, termo) {
-    div.innerHTML = "<p style='color:#facc15; margin-top:10px; margin-bottom:10px;'>A chave da API falhou. Usando resultados de teste:</p>";
+    div.innerHTML = "<p class='resultado-aviso'>A chave da API falhou. Usando resultados de teste:</p>";
 
     let mockItems = [
         { id: { videoId: "M7lc1UVf-VE" }, snippet: { title: termo + " (Teste API Oficial)" } },
@@ -581,12 +577,12 @@ async function buscarLetra(canalYoutube, tituloVideo) {
     if (!document.getElementById("painelSync")) {
         let painel = document.createElement("div");
         painel.id = "painelSync";
-        painel.style.cssText = "display:none; justify-content:center; gap:10px; margin-bottom:15px; color:var(--text-muted); font-size:0.9rem;";
+        painel.className = "painel-sync";
         painel.innerHTML = `
             <span>Sincronia:</span>
-            <button onclick="mudarOffset(-1)" style="background:transparent; border:1px solid #fff; color:#fff; border-radius:5px; padding:0 5px; cursor:pointer;">-1s</button>
+            <button onclick="mudarOffset(-1)" class="painel-sync-btn">-1s</button>
             <span id="txtOffset">0s</span>
-            <button onclick="mudarOffset(1)" style="background:transparent; border:1px solid #fff; color:#fff; border-radius:5px; padding:0 5px; cursor:pointer;">+1s</button>
+            <button onclick="mudarOffset(1)" class="painel-sync-btn">+1s</button>
         `;
         divLetra.parentNode.insertBefore(painel, divLetra);
     } else {

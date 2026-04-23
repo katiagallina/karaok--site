@@ -7,17 +7,17 @@
     <link rel="stylesheet" href="css/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;600;700&display=swap" rel="stylesheet">
 </head>
-<body>
+<body class="page-karaoke">
 
 <!-- Player YouTube invisivel mas na tela (evita bloqueio do navegador) -->
 <div id="youtubePlayer"></div>
 
 <div class="container">
     <h1>&#127908; KARAOKE</h1>
-    <h2 id="nomeMusica" style="font-size:1rem;margin-bottom:5px;">Carregando...</h2>
-    <p id="nomeUsuario" style="color:var(--text-muted);margin-bottom:10px;"></p>
+    <h2 id="nomeMusica" class="karaoke-song-title">Carregando...</h2>
+    <p id="nomeUsuario" class="karaoke-user"></p>
 
-    <p id="loadingMusica" style="margin-bottom:10px;">&#127925; Carregando audio...</p>
+    <p id="loadingMusica" class="karaoke-loading">&#127925; Carregando audio...</p>
     <div id="statusSincronia" class="status-sincronia" aria-hidden="true">Preparando sincronizacao da letra...</div>
 
     <!-- Mini player de audio customizado -->
@@ -40,10 +40,10 @@
     </div>
 
     <!-- Pontuacao -->
-    <h2 id="pontuacao" style="font-size:2.5rem;margin:8px 0;color:var(--neon-yellow);text-shadow:0 0 15px var(--neon-yellow);">&#11088; 0</h2>
+    <h2 id="pontuacao">&#11088; 0</h2>
 
     <!-- Botao finalizar -->
-    <button onclick="finalizar()" class="btn" style="background:linear-gradient(45deg,#dc2626,#ef4444);box-shadow:0 0 15px #ef4444;margin-bottom:15px;">
+    <button onclick="finalizar()" class="btn btn-finalizar">
         &#9209; Finalizar
     </button>
 
