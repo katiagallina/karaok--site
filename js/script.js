@@ -18,6 +18,14 @@ let linhasSincronizadas = [];
 let cantando = false;
 let ultimaLinhaAtiva = -1;
 let ultimoScrollLetraTs = 0;
+let microfoneStream = null;
+let microfoneContexto = null;
+let microfoneAnalyser = null;
+let microfoneDados = null;
+let microfonePronto = false;
+
+const PONTUACAO_INTERVALO_MS = 700;
+const LIMIAR_VOZ = 12;
 
 const yt = localStorage.getItem("musicaAudio");
 const pagina = window.location.pathname;
@@ -92,6 +100,96 @@ function getRankingLocal() {
         return [];
     }
 }
+
+function atualizarStatusMicrofone(texto) {
+    const status = document.getElementById("statusMicrofone");
+    if (status) {
+        status.innerText = texto;
+    }
+}
+
+async function inicializarMicrofone() {
+    if (microfonePronto && microfoneAnalyser) {
+        if (microfoneContexto && microfoneContexto.state === "suspended") {
+            await microfoneContexto.resume();
+        }
+        return true;
+    }
+
+    if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== "function") {
+        atualizarStatusMicrofone("Seu navegador nao suporta captura de microfone.");
+        throw new Error("Microfone indisponivel neste navegador.");
+    }
+
+    try {
+        microfoneStream = await navigator.mediaDevices.getUserMedia({
+            audio: {
+                echoCancellation: true,
+                noiseSuppression: true,
+                autoGainControl: true
+            }
+        });
+
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContextClass) {
+            atualizarStatusMicrofone("AudioContext nao suportado para leitura do microfone.");
+            throw new Error("AudioContext indisponivel.");
+        }
+
+        microfoneContexto = microfoneContexto || new AudioContextClass();
+        const origem = microfoneContexto.createMediaStreamSource(microfoneStream);
+        microfoneAnalyser = microfoneContexto.createAnalyser();
+        microfoneAnalyser.fftSize = 2048;
+        microfoneDados = new Uint8Array(microfoneAnalyser.fftSize);
+        origem.connect(microfoneAnalyser);
+        if (microfoneContexto.state === "suspended") {
+            await microfoneContexto.resume();
+        }
+        microfonePronto = true;
+        atualizarStatusMicrofone("Microfone conectado. A pontuacao sobe quando sua voz for detectada.");
+
+        return true;
+    } catch (erro) {
+        atualizarStatusMicrofone("Nao foi possivel acessar o microfone. Sem ele, a nota nao sobe.");
+        throw erro;
+    }
+}
+
+function obterNivelMicrofone() {
+    if (!microfoneAnalyser || !microfoneDados) {
+        return 0;
+    }
+
+    microfoneAnalyser.getByteTimeDomainData(microfoneDados);
+
+    let soma = 0;
+    for (let i = 0; i < microfoneDados.length; i++) {
+        const amostraNormalizada = (microfoneDados[i] - 128) / 128;
+        soma += amostraNormalizada * amostraNormalizada;
+    }
+
+    return Math.sqrt(soma / microfoneDados.length) * 100;
+}
+
+function encerrarMicrofone() {
+    if (microfoneStream) {
+        microfoneStream.getTracks().forEach((track) => track.stop());
+    }
+
+    if (microfoneContexto && microfoneContexto.state !== "closed") {
+        microfoneContexto.close().catch(() => { });
+    }
+
+    microfoneStream = null;
+    microfoneContexto = null;
+    microfoneAnalyser = null;
+    microfoneDados = null;
+    microfonePronto = false;
+}
+
+window.addEventListener("beforeunload", () => {
+    encerrarMicrofone();
+});
 
 function salvarRankingLocal(registro) {
     const rankingAtual = getRankingLocal();
@@ -384,9 +482,17 @@ function criarPlayer() {
 // ============================================================
 // CONTROLES DO PLAYER
 // ============================================================
-function cantar() {
+async function cantar() {
     if (!playerPronto) {
         alert("Aguarde o carregamento...");
+        return;
+    }
+
+    try {
+        await inicializarMicrofone();
+    } catch (erro) {
+        console.error("Erro ao iniciar microfone:", erro);
+        alert("Precisamos do microfone para calcular a pontuacao. Libere a permissao e tente novamente.");
         return;
     }
 
@@ -412,11 +518,13 @@ function pausarResumir() {
         ytPlayer.pauseVideo();
         cantando = false;
         atualizarStatusSincronia("Musica pausada. Retome quando quiser.");
+        atualizarStatusMicrofone("Microfone em pausa. A pontuacao para enquanto a musica estiver pausada.");
         if (btn) btn.innerHTML = "&#9654; Retomar";
     } else {
         ytPlayer.playVideo();
         cantando = true;
         atualizarStatusSincronia("Musica retomada. Acompanhe a linha destacada.");
+        atualizarStatusMicrofone("Microfone ativo. Cante para continuar pontuando.");
         if (btn) btn.innerHTML = "&#9646;&#9646; Pausar";
     }
 }
@@ -431,6 +539,7 @@ function finalizar() {
     clearInterval(syncInterval);
     clearInterval(progressInterval);
     clearInterval(pontuacaoInterval);
+    encerrarMicrofone();
     window.location.href = "resultado.html";
 }
 
@@ -471,9 +580,16 @@ function iniciarPontuacaoProgressiva() {
     pontuacaoInterval = setInterval(() => {
         if (!cantando || !ytPlayer || ytPlayer.getPlayerState() !== 1) return;
 
+        const nivelMicrofone = obterNivelMicrofone();
+        if (nivelMicrofone < LIMIAR_VOZ) {
+            atualizarStatusMicrofone("Sem voz detectada. Cante mais perto do microfone para pontuar.");
+            return;
+        }
+
         const atual = parseInt((placar.innerText || "").replace(/\D/g, ""), 10) || 0;
         placar.innerHTML = "&#11088; " + (atual + 1);
-    }, 2500);
+        atualizarStatusMicrofone(`Voz detectada. Nivel ${Math.round(nivelMicrofone)}. Pontos subindo.`);
+    }, PONTUACAO_INTERVALO_MS);
 }
 
 function atualizarStatusSincronia(texto) {
