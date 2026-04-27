@@ -8,6 +8,7 @@ const RANKING_STORAGE_KEY = "rankingLocal";
 const RESULTADO_ATUAL_ID_KEY = "resultadoAtualId";
 const RESULTADO_PROCESSADO_KEY = "ultimoResultadoProcessado";
 const RESULTADO_REMOTO_KEY = "ultimoResultadoRemoto";
+const INTRO_LIBERADA_KEY = "karaokeIntroLiberada";
 
 let ytPlayer = null;
 let playerPronto = false;
@@ -29,6 +30,10 @@ const LIMIAR_VOZ = 12;
 
 const yt = localStorage.getItem("musicaAudio");
 const pagina = window.location.pathname;
+
+if (pagina.endsWith("menu.html") && sessionStorage.getItem(INTRO_LIBERADA_KEY) !== "true") {
+    window.location.replace("index.html");
+}
 
 function normalizarSupabaseUrl(url) {
     return String(url || "").replace(/\/+$/, "").replace(/\/rest\/v1$/i, "");
