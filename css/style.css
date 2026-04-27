@@ -822,6 +822,23 @@ button[onclick="buscarMusica()"] {
     filter: drop-shadow(0 0 10px rgba(250, 204, 21, 0.4));
 }
 
+.letra-sync-painel .sync-linha-atual .palavra-sync {
+    display: inline;
+    white-space: pre-wrap;
+    color: rgba(255, 255, 255, 0.34);
+    transition: color 0.12s linear, text-shadow 0.12s linear;
+}
+
+.letra-sync-painel .sync-linha-atual .palavra-sync.palavra-ativa {
+    color: #facc15;
+    text-shadow: 0 0 10px rgba(250, 204, 21, 0.45);
+}
+
+.letra-sync-painel .sync-linha-atual .palavra-sync.palavra-passada {
+    color: rgba(111, 240, 255, 0.96);
+    text-shadow: 0 0 10px rgba(0, 229, 255, 0.3);
+}
+
 .letra-sync-painel .sync-linha-proxima {
     min-height: 3.1em;
     color: rgba(111, 240, 255, 0.92);

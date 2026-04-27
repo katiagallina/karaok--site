@@ -9,6 +9,7 @@ const RESULTADO_ATUAL_ID_KEY = "resultadoAtualId";
 const RESULTADO_PROCESSADO_KEY = "ultimoResultadoProcessado";
 const RESULTADO_REMOTO_KEY = "ultimoResultadoRemoto";
 const INTRO_LIBERADA_KEY = "karaokeIntroLiberada";
+const MUSICA_BUSCA_ORIGINAL_KEY = "musicaBuscaOriginal";
 
 let ytPlayer = null;
 let playerPronto = false;
@@ -396,11 +397,12 @@ if (pagina.includes("karaoke.html")) {
         let nome = localStorage.getItem("nome");
         let musicaNome = localStorage.getItem("musicaNome");
         let musicaArtista = localStorage.getItem("musicaArtista");
+        let musicaBuscaOriginal = localStorage.getItem(MUSICA_BUSCA_ORIGINAL_KEY);
 
         document.getElementById("nomeMusica").innerText = musicaNome || "Nenhuma musica";
         document.getElementById("nomeUsuario").innerText = nome ? "Cantor: " + nome : "";
 
-        if (musicaNome) buscarLetra(musicaArtista || "", musicaNome);
+        if (musicaNome) buscarLetra(musicaArtista || "", musicaNome, musicaBuscaOriginal || "");
         if (yt) carregarAPIYouTube();
     });
 } else if (pagina.endsWith("resultado.html")) {
@@ -613,17 +615,70 @@ function escaparHtml(texto) {
         .replace(/'/g, "&#39;");
 }
 
-function renderizarPainelLetraSync(indiceAtual, progresso = 0) {
+function parseTempoLrc(minutos, segundos) {
+    return parseInt(minutos, 10) * 60 + parseFloat(segundos);
+}
+
+function extrairPalavrasSincronizadas(textoLinha, tempoLinha) {
+    const regex = /<(\d{2}):(\d{2}(?:\.\d{2,3})?)>([^<]*)/g;
+    const palavras = [];
+    let match;
+
+    while ((match = regex.exec(textoLinha)) !== null) {
+        const tempo = parseTempoLrc(match[1], match[2]);
+        const texto = match[3] || "";
+
+        if (!texto) continue;
+
+        palavras.push({ tempo, texto });
+    }
+
+    if (palavras.length > 0 && palavras[0].tempo > tempoLinha) {
+        palavras.unshift({ tempo: tempoLinha, texto: "" });
+    }
+
+    return palavras;
+}
+
+function montarMarkupLinhaAtual(linhaAtual) {
+    if (!linhaAtual?.palavras?.length) {
+        return `<span class="texto-fill">${escaparHtml(linhaAtual?.texto || "")}</span>`;
+    }
+
+    return linhaAtual.palavras
+        .map((palavra, index) => `<span class="palavra-sync" data-word-index="${index}">${escaparHtml(palavra.texto)}</span>`)
+        .join("");
+}
+
+function atualizarPalavrasSincronizadas(container, linhaAtualDados, tempoAtual, tempoFimLinha) {
+    const spans = container.querySelectorAll(".palavra-sync");
+    if (!spans.length || !linhaAtualDados?.palavras?.length) return;
+
+    spans.forEach((span, index) => {
+        const inicio = linhaAtualDados.palavras[index]?.tempo ?? linhaAtualDados.tempo;
+        const fim = linhaAtualDados.palavras[index + 1]?.tempo ?? tempoFimLinha;
+
+        span.classList.remove("palavra-passada", "palavra-ativa");
+
+        if (tempoAtual >= fim) {
+            span.classList.add("palavra-passada");
+        } else if (tempoAtual >= inicio) {
+            span.classList.add("palavra-ativa");
+        }
+    });
+}
+
+function renderizarPainelLetraSync(indiceAtual, progresso = 0, tempoAtual = 0) {
     const divLetra = document.getElementById("divLetra");
     if (!divLetra) return;
 
     divLetra.classList.add("letra-sync-painel");
 
     const anterior = indiceAtual > 0 ? linhasSincronizadas[indiceAtual - 1]?.texto || "" : "";
-    const atual = indiceAtual >= 0 ? linhasSincronizadas[indiceAtual]?.texto || "" : "";
+    const dadosLinhaAtual = indiceAtual >= 0 ? linhasSincronizadas[indiceAtual] : null;
     const proxima = linhasSincronizadas[indiceAtual + 1]?.texto || "";
     const primeira = linhasSincronizadas[0]?.texto || "";
-    const chaveAtual = String(indiceAtual);
+    const chaveAtual = `${indiceAtual}:${dadosLinhaAtual?.palavras?.length ? "word" : "line"}`;
 
     if (divLetra.dataset.activeIndex !== chaveAtual) {
         if (indiceAtual < 0) {
@@ -638,7 +693,7 @@ function renderizarPainelLetraSync(indiceAtual, progresso = 0) {
             divLetra.innerHTML = `
                 <div class="sync-stack">
                     <div class="sync-linha sync-linha-anterior">${escaparHtml(anterior)}</div>
-                    <div class="sync-linha sync-linha-atual"><span class="texto-fill">${escaparHtml(atual)}</span></div>
+                    <div class="sync-linha sync-linha-atual">${montarMarkupLinhaAtual(dadosLinhaAtual)}</div>
                     <div class="sync-linha sync-linha-proxima">${escaparHtml(proxima)}</div>
                 </div>
             `;
@@ -649,7 +704,15 @@ function renderizarPainelLetraSync(indiceAtual, progresso = 0) {
 
     const linhaAtual = divLetra.querySelector(".sync-linha-atual");
     if (linhaAtual) {
-        linhaAtual.style.setProperty("--active-progress", `${progresso}%`);
+        const proximaLinha = indiceAtual >= 0 ? linhasSincronizadas[indiceAtual + 1] || null : null;
+        const tempoFimLinha = proximaLinha ? proximaLinha.tempo : ((dadosLinhaAtual?.tempo || 0) + 2.5);
+
+        if (dadosLinhaAtual?.palavras?.length) {
+            linhaAtual.style.setProperty("--active-progress", "0%");
+            atualizarPalavrasSincronizadas(linhaAtual, dadosLinhaAtual, tempoAtual, tempoFimLinha);
+        } else {
+            linhaAtual.style.setProperty("--active-progress", `${progresso}%`);
+        }
     }
 }
 
@@ -678,7 +741,7 @@ function iniciarSyncLetra() {
             }
 
             if (ativa < 0) {
-                renderizarPainelLetraSync(-1, 0);
+                renderizarPainelLetraSync(-1, 0, tempo);
                 const primeiraLinha = linhasSincronizadas[0];
                 atualizarStatusSincronia("Letra sincronizada pronta.");
                 return;
@@ -688,7 +751,7 @@ function iniciarSyncLetra() {
             const proximaLinha = linhasSincronizadas[ativa + 1] || null;
             const duracaoLinha = proximaLinha ? Math.max(proximaLinha.tempo - linhaAtual.tempo, 0.35) : 2.5;
             const progresso = Math.max(0, Math.min(((tempo - linhaAtual.tempo) / duracaoLinha) * 100, 100));
-            renderizarPainelLetraSync(ativa, progresso);
+            renderizarPainelLetraSync(ativa, progresso, tempo);
 
             ultimaLinhaAtiva = ativa;
 
@@ -713,6 +776,7 @@ async function buscarMusica() {
     }
 
     div.innerHTML = "Buscando...";
+    localStorage.setItem(MUSICA_BUSCA_ORIGINAL_KEY, termo);
 
     let url = `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${encodeURIComponent(termo + " karaoke instrumental")}&type=video&videoEmbeddable=true&videoSyndicated=true&key=${YOUTUBE_API_KEY}&maxResults=5`;
 
@@ -854,9 +918,10 @@ function normalizarTextoBusca(texto) {
         .trim();
 }
 
-function gerarTentativasBuscaLetra(canalYoutube, tituloVideo) {
+function gerarTentativasBuscaLetra(canalYoutube, tituloVideo, buscaOriginal = "") {
     const tituloLimpo = normalizarTextoBusca(tituloVideo);
     const canalLimpo = normalizarTextoBusca(canalYoutube);
+    const buscaLimpa = normalizarTextoBusca(buscaOriginal);
     const tentativas = [];
     const vistos = new Set();
 
@@ -876,6 +941,10 @@ function gerarTentativasBuscaLetra(canalYoutube, tituloVideo) {
     }
 
     const partes = tituloLimpo.split("-").map((p) => p.trim()).filter(Boolean);
+
+    if (buscaLimpa) {
+        adicionar(buscaLimpa, "");
+    }
 
     adicionar(tituloLimpo, canalLimpo);
 
@@ -911,16 +980,20 @@ async function buscarNaLrclib(tentativas) {
         consultas.push(`https://lrclib.net/api/search?q=${encodeURIComponent(tentativa.query)}`);
 
         for (const url of consultas) {
-            const res = await fetch(url);
-            if (!res.ok) continue;
+            try {
+                const res = await fetch(url);
+                if (!res.ok) continue;
 
-            const data = await res.json();
-            if (!Array.isArray(data) || data.length === 0) continue;
+                const data = await res.json();
+                if (!Array.isArray(data) || data.length === 0) continue;
 
-            const comSync = data.find((t) => t.syncedLyrics);
-            if (comSync) return comSync;
+                const comSync = data.find((t) => t.syncedLyrics);
+                if (comSync) return comSync;
 
-            if (data[0]) return data[0];
+                if (data[0]) return data[0];
+            } catch (erro) {
+                console.warn("Falha ao consultar LRCLib:", url, erro);
+            }
         }
     }
 
@@ -931,12 +1004,16 @@ async function buscarNaLyricsOvh(tentativas) {
     for (const tentativa of tentativas) {
         if (!tentativa.artist || !tentativa.song) continue;
 
-        const res = await fetch(`https://api.lyrics.ovh/v1/${encodeURIComponent(tentativa.artist)}/${encodeURIComponent(tentativa.song)}`);
-        if (!res.ok) continue;
+        try {
+            const res = await fetch(`https://api.lyrics.ovh/v1/${encodeURIComponent(tentativa.artist)}/${encodeURIComponent(tentativa.song)}`);
+            if (!res.ok) continue;
 
-        const data = await res.json();
-        if (data && data.lyrics) {
-            return data.lyrics;
+            const data = await res.json();
+            if (data && data.lyrics) {
+                return data.lyrics;
+            }
+        } catch (erro) {
+            console.warn("Falha ao consultar lyrics.ovh:", tentativa, erro);
         }
     }
 
@@ -946,7 +1023,7 @@ async function buscarNaLyricsOvh(tentativas) {
 // ============================================================
 // BUSCAR LETRA DA MUSICA
 // ============================================================
-async function buscarLetra(canalYoutube, tituloVideo) {
+async function buscarLetra(canalYoutube, tituloVideo, buscaOriginal = "") {
     const divLetra = document.getElementById("divLetra");
     if (!divLetra) return;
 
@@ -972,7 +1049,7 @@ async function buscarLetra(canalYoutube, tituloVideo) {
         document.getElementById("txtOffset").innerText = "0s";
     }
 
-    const { tituloLimpo, tentativas } = gerarTentativasBuscaLetra(canalYoutube, tituloVideo);
+    const { tituloLimpo, tentativas } = gerarTentativasBuscaLetra(canalYoutube, tituloVideo, buscaOriginal);
 
     try {
         let track = await buscarNaLrclib(tentativas);
@@ -983,23 +1060,27 @@ async function buscarLetra(canalYoutube, tituloVideo) {
 
             let lines = track.syncedLyrics.split("\n");
 
-            lines.forEach((linha, i) => {
+            lines.forEach((linha) => {
                 let match = linha.match(/\[(\d{1,2}):(\d{2}(?:\.\d{2})?)\](.*)/);
                 if (!match) return;
 
-                let m = parseInt(match[1], 10);
-                let s = parseFloat(match[2]);
-                let tempo = (m * 60) + s;
-                let texto = match[3].trim() || "♪";
+                let tempo = parseTempoLrc(match[1], match[2]);
+                const conteudoOriginal = match[3] || "";
+                const palavras = extrairPalavrasSincronizadas(conteudoOriginal, tempo);
+                let texto = conteudoOriginal.trim() || "♪";
 
                 // Remove possíveis marcações de tempo por palavra (formato Enhanced LRC)
                 texto = texto.replace(/<\d{2}:\d{2}(?:\.\d{2,3})?>/g, "");
 
-                linhasSincronizadas.push({ tempo: tempo, texto: texto });
+                linhasSincronizadas.push({
+                    tempo: tempo,
+                    texto: texto,
+                    palavras
+                });
             });
 
             if (linhasSincronizadas.length > 0) {
-                renderizarPainelLetraSync(-1, 0);
+                renderizarPainelLetraSync(-1, 0, 0);
             } else {
                 divLetra.classList.remove("letra-sync-painel");
                 divLetra.innerHTML = "<p>Letra sincronizada carregada.</p>";
