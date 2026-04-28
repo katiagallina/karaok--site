@@ -10,6 +10,9 @@ const RESULTADO_PROCESSADO_KEY = "ultimoResultadoProcessado";
 const RESULTADO_REMOTO_KEY = "ultimoResultadoRemoto";
 const INTRO_LIBERADA_KEY = "karaokeIntroLiberada";
 const MUSICA_BUSCA_ORIGINAL_KEY = "musicaBuscaOriginal";
+const DESAFIO_TURNO_KEY = "desafioTurnoAtual";
+const DESAFIO_P1_PONTOS_KEY = "desafioPontuacaoJogador1";
+const DESAFIO_P2_PONTOS_KEY = "desafioPontuacaoJogador2";
 
 let ytPlayer = null;
 let playerPronto = false;
@@ -367,6 +370,59 @@ async function inicializarPaginaRanking() {
     }
 }
 
+function inicializarPaginaVS() {
+    const nomeJogador1 = localStorage.getItem("jogador1") || "Jogador 1";
+    const nomeJogador2 = localStorage.getItem("jogador2") || "Jogador 2";
+    const j1 = document.getElementById("j1");
+    const j2 = document.getElementById("j2");
+
+    if (j1) {
+        j1.innerText = nomeJogador1;
+    }
+
+    if (j2) {
+        j2.innerText = nomeJogador2;
+    }
+}
+
+function obterTurnoDesafioAtual() {
+    return localStorage.getItem(DESAFIO_TURNO_KEY) || "1";
+}
+
+function obterNomeJogadorDaVez() {
+    return obterTurnoDesafioAtual() === "2"
+        ? (localStorage.getItem("jogador2") || "Jogador 2")
+        : (localStorage.getItem("jogador1") || "Jogador 1");
+}
+
+function inicializarPaginaResultadoDesafio() {
+    const nomeJogador1 = localStorage.getItem("jogador1") || "Jogador 1";
+    const nomeJogador2 = localStorage.getItem("jogador2") || "Jogador 2";
+    const pontosJogador1 = parseInt(localStorage.getItem(DESAFIO_P1_PONTOS_KEY) || "0", 10) || 0;
+    const pontosJogador2 = parseInt(localStorage.getItem(DESAFIO_P2_PONTOS_KEY) || "0", 10) || 0;
+    const resultadoJ1 = document.getElementById("resultadoJ1");
+    const resultadoJ2 = document.getElementById("resultadoJ2");
+    const vencedor = document.getElementById("vencedor");
+
+    if (resultadoJ1) {
+        resultadoJ1.innerHTML = `${escaparHtml(nomeJogador1)}: &#11088; ${pontosJogador1}`;
+    }
+
+    if (resultadoJ2) {
+        resultadoJ2.innerHTML = `${escaparHtml(nomeJogador2)}: &#11088; ${pontosJogador2}`;
+    }
+
+    if (vencedor) {
+        if (pontosJogador1 === pontosJogador2) {
+            vencedor.innerText = "Empate! Os dois mandaram bem.";
+        } else if (pontosJogador1 > pontosJogador2) {
+            vencedor.innerText = `${nomeJogador1} venceu o duelo!`;
+        } else {
+            vencedor.innerText = `${nomeJogador2} venceu o duelo!`;
+        }
+    }
+}
+
 // ============================================================
 // INICIALIZACAO GERAL (EVENTOS)
 // ============================================================
@@ -387,6 +443,14 @@ window.addEventListener("DOMContentLoaded", () => {
     if (pagina.endsWith("ranking.html")) {
         inicializarPaginaRanking();
     }
+
+    if (pagina.endsWith("vs.html")) {
+        inicializarPaginaVS();
+    }
+
+    if (pagina.endsWith("resultado-desafio.html")) {
+        inicializarPaginaResultadoDesafio();
+    }
 });
 
 // ============================================================
@@ -394,13 +458,22 @@ window.addEventListener("DOMContentLoaded", () => {
 // ============================================================
 if (pagina.includes("karaoke.html")) {
     window.addEventListener("DOMContentLoaded", () => {
-        let nome = localStorage.getItem("nome");
+        let modoAtual = localStorage.getItem("modoAtual") || "livre";
+        let nome = modoAtual === "desafio" ? obterNomeJogadorDaVez() : localStorage.getItem("nome");
         let musicaNome = localStorage.getItem("musicaNome");
         let musicaArtista = localStorage.getItem("musicaArtista");
         let musicaBuscaOriginal = localStorage.getItem(MUSICA_BUSCA_ORIGINAL_KEY);
+        let loading = document.getElementById("loadingMusica");
 
         document.getElementById("nomeMusica").innerText = musicaNome || "Nenhuma musica";
         document.getElementById("nomeUsuario").innerText = nome ? "Cantor: " + nome : "";
+
+        if (modoAtual === "desafio" && loading) {
+            const turno = obterTurnoDesafioAtual();
+            loading.innerText = turno === "2"
+                ? `Agora e a vez de ${nome} cantar.`
+                : `${nome} comeca a cantar agora.`;
+        }
 
         if (musicaNome) buscarLetra(musicaArtista || "", musicaNome, musicaBuscaOriginal || "");
         if (yt) carregarAPIYouTube();
@@ -541,12 +614,32 @@ function finalizar() {
         ytPlayer.stopVideo();
     }
 
-    localStorage.setItem("pontuacaoFinal", String(obterPontuacaoAtual()));
+    const pontuacaoAtual = String(obterPontuacaoAtual());
+    const modoAtual = localStorage.getItem("modoAtual") || "livre";
+    localStorage.setItem("pontuacaoFinal", pontuacaoAtual);
     localStorage.setItem(RESULTADO_ATUAL_ID_KEY, gerarResultadoAtualId());
     clearInterval(syncInterval);
     clearInterval(progressInterval);
     clearInterval(pontuacaoInterval);
     encerrarMicrofone();
+
+    if (modoAtual === "desafio") {
+        const turno = obterTurnoDesafioAtual();
+
+        if (turno === "2") {
+            localStorage.setItem(DESAFIO_P2_PONTOS_KEY, pontuacaoAtual);
+            localStorage.setItem(DESAFIO_TURNO_KEY, "1");
+            window.location.href = "resultado-desafio.html";
+            return;
+        }
+
+        localStorage.setItem(DESAFIO_P1_PONTOS_KEY, pontuacaoAtual);
+        localStorage.setItem(DESAFIO_TURNO_KEY, "2");
+        alert(`Agora e a vez de ${localStorage.getItem("jogador2") || "Jogador 2"} cantar.`);
+        window.location.href = "karaoke.html";
+        return;
+    }
+
     window.location.href = "resultado.html";
 }
 
@@ -900,6 +993,9 @@ function irParaVS() {
 
 function iniciarDuelo() {
     localStorage.setItem("modoAtual", "desafio");
+    localStorage.setItem(DESAFIO_TURNO_KEY, "1");
+    localStorage.removeItem(DESAFIO_P1_PONTOS_KEY);
+    localStorage.removeItem(DESAFIO_P2_PONTOS_KEY);
     window.location.href = "karaoke.html";
 }
 
