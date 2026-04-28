@@ -1120,12 +1120,41 @@ button[onclick="buscarMusica()"] {
 }
 
 .page-ranking #listaRanking {
-    max-width: 360px;
+    max-width: 460px;
+    flex: 1;
+    min-height: 0;
+    max-height: 100%;
+    overflow-y: auto;
+    padding-right: 6px;
+    margin-top: 14px;
 }
 
 .page-ranking #listaRanking li {
-    padding: 12px;
-    font-size: 0.95rem;
+    padding: 9px 11px;
+    font-size: 0.84rem;
+    line-height: 1.3;
+    margin-bottom: 8px;
+}
+
+.page-ranking #listaRanking li small {
+    display: inline-block;
+    margin-top: 3px;
+    font-size: 0.74rem;
+    line-height: 1.25;
+}
+
+.page-ranking .container {
+    justify-content: flex-start;
+    min-height: 70vh;
+    gap: 8px;
+}
+
+.page-ranking h1 {
+    margin-bottom: 4px;
+}
+
+.page-ranking .botoes {
+    margin-top: 12px;
 }
 
 .page-resultado #pontuacaoFinal {
