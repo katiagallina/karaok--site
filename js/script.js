@@ -325,6 +325,8 @@ window.onYouTubeIframeAPIReady = function () {
 // ============================================================
 // CRIAR PLAYER
 // ============================================================
+let indiceVideoAtual = -1;
+
 function criarPlayer() {
     if (!yt) return;
 
@@ -353,15 +355,25 @@ function criarPlayer() {
 
                 if (e.data == 150 || e.data == 101) {
                     let alternativos = JSON.parse(localStorage.getItem("musicasAlternativas") || "[]");
-                    let ytAtual = e.target.getVideoData().video_id || yt;
-                    let idx = alternativos.indexOf(ytAtual);
+                    
+                    if (indiceVideoAtual === -1) {
+                        indiceVideoAtual = alternativos.indexOf(yt);
+                        if (indiceVideoAtual === -1) indiceVideoAtual = 0;
+                    }
 
-                    if (idx !== -1 && idx < alternativos.length - 1) {
-                        let proximoVideo = alternativos[idx + 1];
+                    if (indiceVideoAtual < alternativos.length - 1) {
+                        indiceVideoAtual++;
+                        let proximoVideo = alternativos[indiceVideoAtual];
                         console.log("Tentando video alternativo...", proximoVideo);
 
-                        document.getElementById("loadingMusica").innerText = "Video bloqueado pelo autor. Carregando versao secundaria...";
-                        e.target.loadVideoById(proximoVideo);
+                        let loading = document.getElementById("loadingMusica");
+                        if (loading) {
+                            loading.innerText = "Video bloqueado. Buscando alternativa " + (indiceVideoAtual + 1) + " de " + alternativos.length + "...";
+                        }
+                        
+                        if (cantando) e.target.loadVideoById(proximoVideo);
+                        else e.target.cueVideoById(proximoVideo);
+                        
                         localStorage.setItem("musicaAudio", proximoVideo);
                         return;
                     }
@@ -585,7 +597,7 @@ async function buscarMusica() {
 
     div.innerHTML = "Buscando...";
 
-    let url = `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${encodeURIComponent(termo + " karaoke instrumental")}&type=video&videoEmbeddable=true&videoSyndicated=true&key=${YOUTUBE_API_KEY}&maxResults=5`;
+    let url = `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${encodeURIComponent(termo + " karaoke instrumental")}&type=video&videoEmbeddable=true&videoSyndicated=true&key=${YOUTUBE_API_KEY}&maxResults=10`;
 
     try {
         let res = await fetch(url);
@@ -771,47 +783,116 @@ function gerarTentativasBuscaLetra(canalYoutube, tituloVideo) {
     return { tituloLimpo, tentativas };
 }
 
-async function buscarNaLrclib(tentativas) {
-    for (const tentativa of tentativas) {
-        const consultas = [];
-
-        if (tentativa.artist) {
-            consultas.push(`https://lrclib.net/api/search?track_name=${encodeURIComponent(tentativa.song)}&artist_name=${encodeURIComponent(tentativa.artist)}`);
-        }
-
-        consultas.push(`https://lrclib.net/api/search?q=${encodeURIComponent(tentativa.query)}`);
-
-        for (const url of consultas) {
-            const res = await fetch(url);
-            if (!res.ok) continue;
-
-            const data = await res.json();
-            if (!Array.isArray(data) || data.length === 0) continue;
-
-            const comSync = data.find((t) => t.syncedLyrics);
-            if (comSync) return comSync;
-
-            if (data[0]) return data[0];
-        }
+async function fetchComTimeout(url, timeoutMs = 5000) {
+    try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+        const res = await fetch(url, { signal: controller.signal });
+        clearTimeout(timeoutId);
+        return res;
+    } catch (e) {
+        return null;
     }
+}
 
-    return null;
+async function fetchLrclib(url) {
+    const res = await fetchComTimeout(url, 5000);
+    if (!res || !res.ok) return null;
+    try {
+        return await res.json();
+    } catch (e) {
+        return null;
+    }
+}
+
+async function buscarNaLrclib(tentativas) {
+    // Processamos apenas as 4 primeiras combinações em paralelo para não sobrecarregar a API
+    const tentativasAtivas = tentativas.slice(0, 4);
+    let promessas = [];
+
+    tentativasAtivas.forEach(tentativa => {
+        if (tentativa.artist) {
+            promessas.push(fetchLrclib(`https://lrclib.net/api/search?track_name=${encodeURIComponent(tentativa.song)}&artist_name=${encodeURIComponent(tentativa.artist)}`));
+        }
+        promessas.push(fetchLrclib(`https://lrclib.net/api/search?q=${encodeURIComponent(tentativa.query)}`));
+    });
+
+    return new Promise((resolve) => {
+        let pendentes = promessas.length;
+        let melhorResultadoSemSync = null;
+        let resolvido = false;
+
+        if (pendentes === 0) {
+            resolve(null);
+            return;
+        }
+
+        promessas.forEach(p => {
+            p.then(data => {
+                if (resolvido) return;
+
+                pendentes--;
+                if (data && Array.isArray(data) && data.length > 0) {
+                    const comSync = data.find(t => t.syncedLyrics);
+                    if (comSync) {
+                        resolvido = true;
+                        resolve(comSync);
+                    } else if (!melhorResultadoSemSync) {
+                        melhorResultadoSemSync = data[0];
+                    }
+                }
+
+                if (pendentes === 0 && !resolvido) {
+                    resolvido = true;
+                    resolve(melhorResultadoSemSync);
+                }
+            });
+        });
+    });
+}
+
+async function fetchLyricsOvh(url) {
+    const res = await fetchComTimeout(url, 5000);
+    if (!res || !res.ok) return null;
+    try {
+        const data = await res.json();
+        return data && data.lyrics ? data.lyrics : null;
+    } catch (e) {
+        return null;
+    }
 }
 
 async function buscarNaLyricsOvh(tentativas) {
-    for (const tentativa of tentativas) {
-        if (!tentativa.artist || !tentativa.song) continue;
+    const tentativasAtivas = tentativas.filter(t => t.artist && t.song).slice(0, 4);
 
-        const res = await fetch(`https://api.lyrics.ovh/v1/${encodeURIComponent(tentativa.artist)}/${encodeURIComponent(tentativa.song)}`);
-        if (!res.ok) continue;
+    return new Promise((resolve) => {
+        let pendentes = tentativasAtivas.length;
+        let resolvido = false;
 
-        const data = await res.json();
-        if (data && data.lyrics) {
-            return data.lyrics;
+        if (pendentes === 0) {
+            resolve(null);
+            return;
         }
-    }
 
-    return null;
+        tentativasAtivas.forEach(tentativa => {
+            fetchLyricsOvh(`https://api.lyrics.ovh/v1/${encodeURIComponent(tentativa.artist)}/${encodeURIComponent(tentativa.song)}`)
+                .then(lyrics => {
+                    if (resolvido) return;
+                    
+                    pendentes--;
+
+                    if (lyrics) {
+                        resolvido = true;
+                        resolve(lyrics);
+                    }
+
+                    if (pendentes === 0 && !resolvido) {
+                        resolvido = true;
+                        resolve(null);
+                    }
+                });
+        });
+    });
 }
 
 // ============================================================
