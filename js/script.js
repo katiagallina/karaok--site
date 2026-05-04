@@ -8,6 +8,7 @@ const RANKING_STORAGE_KEY = "rankingLocal";
 const RESULTADO_ATUAL_ID_KEY = "resultadoAtualId";
 const RESULTADO_PROCESSADO_KEY = "ultimoResultadoProcessado";
 const RESULTADO_REMOTO_KEY = "ultimoResultadoRemoto";
+const LIMITE_RESULTADOS_BUSCA = 6;
 
 let ytPlayer = null;
 let playerPronto = false;
@@ -531,20 +532,24 @@ function extrairMetadadosMusica(tituloVideo, canalYoutube = "") {
     const partes = tituloLimpo.split(/\s+-\s+/).map((parte) => parte.trim()).filter(Boolean);
 
     let artistaProvavel = "";
-    let musicaProvavel = tituloLimpo;
+    let musicaProvavel = limparSegmentoMusical(tituloLimpo);
 
     if (partes.length >= 2) {
-        artistaProvavel = partes[0];
-        musicaProvavel = partes.slice(1).join(" - ");
+        artistaProvavel = limparSegmentoMusical(partes[0]);
+        musicaProvavel = limparSegmentoMusical(partes.slice(1).join(" - "));
     }
 
     if (!musicaProvavel) {
-        musicaProvavel = tituloLimpo;
+        musicaProvavel = limparSegmentoMusical(tituloLimpo);
+    }
+
+    if (!artistaProvavel && canalLimpo) {
+        artistaProvavel = limparSegmentoMusical(canalLimpo);
     }
 
     const tituloExibicao = artistaProvavel && musicaProvavel
         ? `${artistaProvavel} - ${musicaProvavel}`
-        : (tituloLimpo || tituloBruto);
+        : (musicaProvavel || tituloLimpo || tituloBruto);
 
     return {
         tituloBruto,
@@ -730,6 +735,7 @@ function renderizarListaMusicas(items, div) {
         .filter((m) => m.id && m.id.videoId)
         .map((m) => ({ original: m, ...pontuarResultadoMusica(m, termoBusca) }))
         .sort((a, b) => b.score - a.score)
+        .slice(0, LIMITE_RESULTADOS_BUSCA)
         .map((item) => item.original);
 
     let alternativos = itensOrdenados.map((m) => m.id.videoId);
@@ -975,6 +981,14 @@ function gerarTentativasBuscaLetra(canalYoutube, tituloVideo) {
     return { tituloLimpo, tentativas };
 }
 
+function limparSegmentoMusical(segmento) {
+    return normalizarTextoBusca(segmento || "")
+        .replace(/\b(part|part\.|feat|feat\.|ft|ft\.|participacao|participação|participacoes|participações|com|letra)\b.*$/i, " ")
+        .replace(/\b(ritmo|versao|versão|video|vídeo|oficial|natanzinho|seresta)\b.*$/i, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+}
+
 async function fetchComTimeout(url, timeoutMs = 5000) {
     try {
         const controller = new AbortController();
@@ -999,7 +1013,7 @@ async function fetchLrclib(url) {
 
 async function buscarNaLrclib(tentativas) {
     // Processamos apenas as 4 primeiras combinações em paralelo para não sobrecarregar a API
-    const tentativasAtivas = tentativas.slice(0, 4);
+    const tentativasAtivas = tentativas.slice(0, 6);
     let promessas = [];
 
     tentativasAtivas.forEach(tentativa => {
@@ -1055,7 +1069,7 @@ async function fetchLyricsOvh(url) {
 }
 
 async function buscarNaLyricsOvh(tentativas) {
-    const tentativasAtivas = tentativas.filter(t => t.artist && t.song).slice(0, 4);
+    const tentativasAtivas = tentativas.filter(t => t.artist && t.song).slice(0, 6);
 
     return new Promise((resolve) => {
         let pendentes = tentativasAtivas.length;
