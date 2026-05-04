@@ -285,11 +285,19 @@ if (pagina.includes("karaoke.html")) {
         let nome = localStorage.getItem("nome");
         let musicaNome = localStorage.getItem("musicaNome");
         let musicaArtista = localStorage.getItem("musicaArtista");
+        let musicaCanalYoutube = localStorage.getItem("musicaCanalYoutube");
+        let musicaTituloOriginal = localStorage.getItem("musicaTituloOriginal");
+        const metaMusica = extrairMetadadosMusica(musicaTituloOriginal || musicaNome || "", musicaCanalYoutube || musicaArtista || "");
+        const musicaNomeExibicao = metaMusica.tituloExibicao || decodificarHtml(musicaNome || "");
 
-        document.getElementById("nomeMusica").innerText = musicaNome || "Nenhuma musica";
+        document.getElementById("nomeMusica").innerText = musicaNomeExibicao || "Nenhuma musica";
         document.getElementById("nomeUsuario").innerText = nome ? "Cantor: " + nome : "";
 
-        if (musicaNome) buscarLetra(musicaArtista || "", musicaNome);
+        if (musicaNomeExibicao && musicaNomeExibicao !== musicaNome) {
+            localStorage.setItem("musicaNome", musicaNomeExibicao);
+        }
+
+        if (musicaNome) buscarLetra(musicaArtista || musicaCanalYoutube || "", musicaTituloOriginal || musicaNome);
         if (yt) carregarAPIYouTube();
     });
 } else if (pagina.endsWith("resultado.html")) {
@@ -496,6 +504,79 @@ function escaparHtml(texto) {
         .replace(/'/g, "&#39;");
 }
 
+function decodificarHtml(texto) {
+    const textarea = document.createElement("textarea");
+    textarea.innerHTML = String(texto || "");
+    return textarea.value;
+}
+
+function normalizarComparacao(texto) {
+    return decodificarHtml(texto)
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+}
+
+function extrairMetadadosMusica(tituloVideo, canalYoutube = "") {
+    const tituloBruto = decodificarHtml(tituloVideo || "");
+    const canalBruto = decodificarHtml(canalYoutube || "");
+    const tituloSemSufixoCanal = tituloBruto
+        .replace(/\s+\|\s+[^|]+$/g, " ")
+        .replace(/\s+\/\s+[^/]+$/g, " ");
+    const tituloLimpo = normalizarTextoBusca(tituloSemSufixoCanal);
+    const canalLimpo = normalizarTextoBusca(canalBruto);
+    const partes = tituloLimpo.split(/\s+-\s+/).map((parte) => parte.trim()).filter(Boolean);
+
+    let artistaProvavel = "";
+    let musicaProvavel = tituloLimpo;
+
+    if (partes.length >= 2) {
+        artistaProvavel = partes[0];
+        musicaProvavel = partes.slice(1).join(" - ");
+    }
+
+    if (!musicaProvavel) {
+        musicaProvavel = tituloLimpo;
+    }
+
+    const tituloExibicao = artistaProvavel && musicaProvavel
+        ? `${artistaProvavel} - ${musicaProvavel}`
+        : (tituloLimpo || tituloBruto);
+
+    return {
+        tituloBruto,
+        tituloLimpo,
+        tituloExibicao,
+        canalBruto,
+        canalLimpo,
+        artistaProvavel,
+        musicaProvavel
+    };
+}
+
+function pontuarResultadoMusica(item, termoBusca) {
+    const meta = extrairMetadadosMusica(item?.snippet?.title || "", item?.snippet?.channelTitle || "");
+    const tituloNorm = normalizarComparacao(meta.tituloExibicao || meta.tituloBruto);
+    const termoNorm = normalizarComparacao(termoBusca);
+    const tokens = termoNorm.split(" ").filter((token) => token.length > 1);
+    let score = 0;
+
+    if (termoNorm && tituloNorm.includes(termoNorm)) score += 40;
+    if (tokens.length > 0) {
+        score += tokens.filter((token) => tituloNorm.includes(token)).length * 8;
+    }
+
+    if (/\b(karaoke|playback|instrumental)\b/i.test(meta.tituloBruto)) score += 25;
+    if (/\b(karaoke|playback|instrumental)\b/i.test(meta.canalBruto)) score += 10;
+    if (meta.artistaProvavel && meta.musicaProvavel) score += 8;
+    if (/\b(cover|live|ao vivo|dvd|show|clipe|studio sessions)\b/i.test(meta.tituloBruto)) score -= 20;
+
+    return { score, meta };
+}
+
 function renderizarPainelLetraSync(indiceAtual, progresso = 0) {
     const divLetra = document.getElementById("divLetra");
     if (!divLetra) return;
@@ -597,7 +678,7 @@ async function buscarMusica() {
 
     div.innerHTML = "Buscando...";
 
-    let url = `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${encodeURIComponent(termo + " karaoke instrumental")}&type=video&videoEmbeddable=true&videoSyndicated=true&key=${YOUTUBE_API_KEY}&maxResults=10`;
+    let url = `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${encodeURIComponent(termo + " karaoke playback instrumental")}&type=video&videoEmbeddable=true&videoSyndicated=true&key=${YOUTUBE_API_KEY}&maxResults=12`;
 
     try {
         let res = await fetch(url);
@@ -616,27 +697,36 @@ async function buscarMusica() {
 
 function renderizarListaMusicas(items, div) {
     div.innerHTML = "";
+    const termoBusca = document.getElementById("buscaMusica")?.value.trim() || "";
+    const itensOrdenados = items
+        .filter((m) => m.id && m.id.videoId)
+        .map((m) => ({ original: m, ...pontuarResultadoMusica(m, termoBusca) }))
+        .sort((a, b) => b.score - a.score)
+        .map((item) => item.original);
 
-    let alternativos = items.filter((m) => m.id && m.id.videoId).map((m) => m.id.videoId);
+    let alternativos = itensOrdenados.map((m) => m.id.videoId);
     localStorage.setItem("musicasAlternativas", JSON.stringify(alternativos));
 
-    items.forEach((m) => {
+    itensOrdenados.forEach((m) => {
         if (!m.id.videoId) return;
 
+        const meta = extrairMetadadosMusica(m.snippet.title, m.snippet.channelTitle || "");
+        const tituloTela = meta.tituloExibicao || meta.tituloBruto;
+
         let item = document.createElement("div");
-        item.dataset.title = m.snippet.title;
-        item.innerHTML = `<strong>${m.snippet.title}</strong>`;
+        item.dataset.title = tituloTela;
+        item.innerHTML = `<strong>${escaparHtml(tituloTela)}</strong>`;
         item.className = "resultado-item";
 
         item.onclick = () => {
             document.querySelectorAll(".resultado-item").forEach((el) => {
                 el.classList.remove("selecionado");
-                el.innerHTML = `<strong>${el.dataset.title}</strong>`;
+                el.innerHTML = `<strong>${escaparHtml(el.dataset.title || "")}</strong>`;
             });
 
             item.classList.add("selecionado");
-            item.innerHTML = `<strong>${m.snippet.title}</strong> <span class="resultado-ok">OK</span>`;
-            selecionarMusica(m.snippet.title, m.snippet.channelTitle || "Karaoke", m.id.videoId);
+            item.innerHTML = `<strong>${escaparHtml(tituloTela)}</strong> <span class="resultado-ok">OK</span>`;
+            selecionarMusica(meta, m.id.videoId);
         };
 
         div.appendChild(item);
@@ -658,10 +748,15 @@ function mostrarResultadosFallback(div, termo) {
 // ============================================================
 // SALVAR MUSICA
 // ============================================================
-function selecionarMusica(nome, artista, videoId) {
-    localStorage.setItem("musicaSelecionada", nome);
-    localStorage.setItem("musicaNome", nome);
-    localStorage.setItem("musicaArtista", artista);
+function selecionarMusica(meta, videoId) {
+    const nomeExibicao = meta.tituloExibicao || meta.tituloLimpo || meta.tituloBruto || "Musica";
+    const artistaBusca = meta.artistaProvavel || meta.canalLimpo || "Karaoke";
+
+    localStorage.setItem("musicaSelecionada", nomeExibicao);
+    localStorage.setItem("musicaNome", nomeExibicao);
+    localStorage.setItem("musicaArtista", artistaBusca);
+    localStorage.setItem("musicaCanalYoutube", meta.canalBruto || "");
+    localStorage.setItem("musicaTituloOriginal", meta.tituloBruto || nomeExibicao);
     localStorage.setItem("musicaAudio", videoId);
 }
 
@@ -778,6 +873,69 @@ function gerarTentativasBuscaLetra(canalYoutube, tituloVideo) {
 
     if (canalLimpo) {
         adicionar(tituloLimpo, canalLimpo);
+    }
+
+    return { tituloLimpo, tentativas };
+}
+
+function normalizarTextoBusca(texto) {
+    return decodificarHtml(texto || "")
+        .replace(/\(.*?\)|\[.*?\]/g, " ")
+        .replace(/\s+\|\s+[^|]+$/g, " ")
+        .replace(/karaok[eê]|instrumental|version|vers[aã]o|cover|playback|com letra|lyrics?|audio oficial|video oficial|official video|official audio|studio sessions/gi, " ")
+        .replace(/\|/g, " ")
+        .replace(/\s+e\s+/gi, " & ")
+        .replace(/[^a-zA-Z0-9À-ÿ\s\-&']/g, " ")
+        .replace(/\s+/g, " ")
+        .replace(/-\s*-/g, "-")
+        .trim();
+}
+
+function gerarTentativasBuscaLetra(canalYoutube, tituloVideo) {
+    const meta = extrairMetadadosMusica(tituloVideo, canalYoutube);
+    const tituloLimpo = meta.tituloExibicao || meta.tituloLimpo;
+    const canalLimpo = meta.canalLimpo;
+    const tentativas = [];
+    const vistos = new Set();
+
+    function adicionar(song, artist) {
+        const musica = (song || "").trim();
+        const artista = (artist || "").trim();
+        const chave = `${musica.toLowerCase()}|${artista.toLowerCase()}`;
+
+        if (!musica || vistos.has(chave)) return;
+        vistos.add(chave);
+
+        tentativas.push({
+            song: musica,
+            artist: artista,
+            query: artista ? `${artista} ${musica}` : musica
+        });
+    }
+
+    const partes = tituloLimpo.split("-").map((p) => p.trim()).filter(Boolean);
+
+    adicionar(meta.musicaProvavel, meta.artistaProvavel);
+    adicionar(meta.musicaProvavel, canalLimpo);
+    adicionar(tituloLimpo, meta.artistaProvavel);
+    adicionar(tituloLimpo, "");
+
+    if (partes.length >= 2) {
+        const primeira = partes[0];
+        const resto = partes.slice(1).join(" - ");
+        adicionar(resto, primeira);
+        adicionar(resto, "");
+        adicionar(primeira, resto);
+        adicionar(primeira, "");
+    }
+
+    if (partes.length >= 3) {
+        adicionar(partes[1], partes[0]);
+        adicionar(partes[0], partes[1]);
+    }
+
+    if (canalLimpo) {
+        adicionar(meta.musicaProvavel || tituloLimpo, canalLimpo);
     }
 
     return { tituloLimpo, tentativas };
