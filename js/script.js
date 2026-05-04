@@ -557,6 +557,33 @@ function extrairMetadadosMusica(tituloVideo, canalYoutube = "") {
     };
 }
 
+function limparSegmentoMusical(segmento) {
+    return normalizarTextoBusca(segmento || "")
+        .replace(/\b(part|part\.|feat|feat\.|ft|ft\.|participacao|participação|com|letra)\b.*$/i, " ")
+        .replace(/\b(ritmo|versao|versão|video|vídeo|oficial)\b.*$/i, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+}
+
+function extrairMetadadosBusca(textoBusca) {
+    const buscaLimpa = limparSegmentoMusical(textoBusca || "");
+    const partes = buscaLimpa.split(/\s+-\s+/).map((parte) => parte.trim()).filter(Boolean);
+
+    if (partes.length >= 2) {
+        return {
+            buscaLimpa,
+            artista: limparSegmentoMusical(partes[0]),
+            musica: limparSegmentoMusical(partes.slice(1).join(" - "))
+        };
+    }
+
+    return {
+        buscaLimpa,
+        artista: "",
+        musica: buscaLimpa
+    };
+}
+
 function pontuarResultadoMusica(item, termoBusca) {
     const meta = extrairMetadadosMusica(item?.snippet?.title || "", item?.snippet?.channelTitle || "");
     const tituloNorm = normalizarComparacao(meta.tituloExibicao || meta.tituloBruto);
@@ -677,6 +704,7 @@ async function buscarMusica() {
     }
 
     div.innerHTML = "Buscando...";
+    localStorage.setItem("musicaBuscaOriginal", termo);
 
     let url = `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${encodeURIComponent(termo + " karaoke playback instrumental")}&type=video&videoEmbeddable=true&videoSyndicated=true&key=${YOUTUBE_API_KEY}&maxResults=12`;
 
@@ -751,12 +779,14 @@ function mostrarResultadosFallback(div, termo) {
 function selecionarMusica(meta, videoId) {
     const nomeExibicao = meta.tituloExibicao || meta.tituloLimpo || meta.tituloBruto || "Musica";
     const artistaBusca = meta.artistaProvavel || meta.canalLimpo || "Karaoke";
+    const buscaOriginal = localStorage.getItem("musicaBuscaOriginal") || "";
 
     localStorage.setItem("musicaSelecionada", nomeExibicao);
     localStorage.setItem("musicaNome", nomeExibicao);
     localStorage.setItem("musicaArtista", artistaBusca);
     localStorage.setItem("musicaCanalYoutube", meta.canalBruto || "");
     localStorage.setItem("musicaTituloOriginal", meta.tituloBruto || nomeExibicao);
+    localStorage.setItem("musicaBuscaOriginal", buscaOriginal);
     localStorage.setItem("musicaAudio", videoId);
 }
 
@@ -882,7 +912,7 @@ function normalizarTextoBusca(texto) {
     return decodificarHtml(texto || "")
         .replace(/\(.*?\)|\[.*?\]/g, " ")
         .replace(/\s+\|\s+[^|]+$/g, " ")
-        .replace(/karaok[eê]|instrumental|version|vers[aã]o|cover|playback|com letra|lyrics?|audio oficial|video oficial|official video|official audio|studio sessions/gi, " ")
+        .replace(/karaok[eê]|instrumental|version|vers[aã]o|cover|playback|com letra|lyrics?|audio oficial|video oficial|official video|official audio|studio sessions|ao vivo|live/gi, " ")
         .replace(/\|/g, " ")
         .replace(/\s+e\s+/gi, " & ")
         .replace(/[^a-zA-Z0-9À-ÿ\s\-&']/g, " ")
@@ -895,6 +925,8 @@ function gerarTentativasBuscaLetra(canalYoutube, tituloVideo) {
     const meta = extrairMetadadosMusica(tituloVideo, canalYoutube);
     const tituloLimpo = meta.tituloExibicao || meta.tituloLimpo;
     const canalLimpo = meta.canalLimpo;
+    const buscaOriginal = localStorage.getItem("musicaBuscaOriginal") || "";
+    const metaBusca = extrairMetadadosBusca(buscaOriginal);
     const tentativas = [];
     const vistos = new Set();
 
@@ -915,6 +947,8 @@ function gerarTentativasBuscaLetra(canalYoutube, tituloVideo) {
 
     const partes = tituloLimpo.split("-").map((p) => p.trim()).filter(Boolean);
 
+    adicionar(metaBusca.musica, metaBusca.artista);
+    adicionar(metaBusca.buscaLimpa, "");
     adicionar(meta.musicaProvavel, meta.artistaProvavel);
     adicionar(meta.musicaProvavel, canalLimpo);
     adicionar(tituloLimpo, meta.artistaProvavel);
