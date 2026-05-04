@@ -1018,6 +1018,98 @@ function limparSegmentoMusical(segmento) {
         .trim();
 }
 
+function calcularScoreCompatibilidadeLetra(track, tentativas) {
+    const tituloTrack = normalizarComparacao(track?.trackName || track?.name || "");
+    const artistaTrack = normalizarComparacao(track?.artistName || track?.artist || "");
+    let melhorScore = 0;
+
+    tentativas.forEach((tentativa) => {
+        const musicaTentativa = normalizarComparacao(tentativa.song || "");
+        const artistaTentativa = normalizarComparacao(tentativa.artist || "");
+        let score = 0;
+
+        if (musicaTentativa && tituloTrack) {
+            if (tituloTrack === musicaTentativa) score += 80;
+            else if (tituloTrack.includes(musicaTentativa) || musicaTentativa.includes(tituloTrack)) score += 45;
+
+            const tokensMusica = musicaTentativa.split(" ").filter((token) => token.length > 2);
+            score += tokensMusica.filter((token) => tituloTrack.includes(token)).length * 8;
+        }
+
+        if (artistaTentativa && artistaTrack) {
+            if (artistaTrack === artistaTentativa) score += 60;
+            else if (artistaTrack.includes(artistaTentativa) || artistaTentativa.includes(artistaTrack)) score += 30;
+
+            const tokensArtista = artistaTentativa.split(" ").filter((token) => token.length > 2);
+            score += tokensArtista.filter((token) => artistaTrack.includes(token)).length * 6;
+        }
+
+        if (score > melhorScore) {
+            melhorScore = score;
+        }
+    });
+
+    return melhorScore;
+}
+
+function analisarCompatibilidadeLetra(track, tentativas) {
+    const tituloTrack = limparSegmentoMusical(track?.trackName || track?.name || "");
+    const artistaTrack = limparSegmentoMusical(track?.artistName || track?.artist || "");
+    const tituloNorm = normalizarComparacao(tituloTrack);
+    const artistaNorm = normalizarComparacao(artistaTrack);
+    let melhor = {
+        total: 0,
+        tituloScore: 0,
+        artistaScore: 0,
+        tentativa: null
+    };
+
+    tentativas.forEach((tentativa) => {
+        const musica = limparSegmentoMusical(tentativa.song || "");
+        const artista = limparSegmentoMusical(tentativa.artist || "");
+        const musicaNorm = normalizarComparacao(musica);
+        const artistaTentativaNorm = normalizarComparacao(artista);
+        let tituloScore = 0;
+        let artistaScore = 0;
+
+        if (musicaNorm && tituloNorm) {
+            if (tituloNorm === musicaNorm) tituloScore = 100;
+            else if (tituloNorm.includes(musicaNorm) || musicaNorm.includes(tituloNorm)) tituloScore = 70;
+            else {
+                const tokensMusica = musicaNorm.split(" ").filter((token) => token.length > 2);
+                tituloScore = tokensMusica.filter((token) => tituloNorm.includes(token)).length * 12;
+            }
+        }
+
+        if (artistaTentativaNorm && artistaNorm) {
+            if (artistaNorm === artistaTentativaNorm) artistaScore = 100;
+            else if (artistaNorm.includes(artistaTentativaNorm) || artistaTentativaNorm.includes(artistaNorm)) artistaScore = 65;
+            else {
+                const tokensArtista = artistaTentativaNorm.split(" ").filter((token) => token.length > 2);
+                artistaScore = tokensArtista.filter((token) => artistaNorm.includes(token)).length * 14;
+            }
+        }
+
+        const total = tituloScore + artistaScore;
+        if (total > melhor.total) {
+            melhor = {
+                total,
+                tituloScore,
+                artistaScore,
+                tentativa
+            };
+        }
+    });
+
+    const precisaValidarArtista = tentativas.some((tentativa) => (tentativa.artist || "").trim().length > 0);
+    const aceito = melhor.tituloScore >= 70 && (!precisaValidarArtista || melhor.artistaScore >= 65);
+
+    return {
+        ...melhor,
+        aceito
+    };
+}
+
 async function fetchComTimeout(url, timeoutMs = 5000) {
     try {
         const controller = new AbortController();
@@ -1068,12 +1160,29 @@ async function buscarNaLrclib(tentativas) {
 
                 pendentes--;
                 if (data && Array.isArray(data) && data.length > 0) {
-                    const comSync = data.find(t => t.syncedLyrics);
+                    const candidatosValidos = data
+                        .map((track) => ({
+                            track,
+                            score: calcularScoreCompatibilidadeLetra(track, tentativasAtivas),
+                            compatibilidade: analisarCompatibilidadeLetra(track, tentativasAtivas)
+                        }))
+                        .filter((item) => item.compatibilidade.aceito)
+                        .sort((a, b) => {
+                            if (!!b.track.syncedLyrics !== !!a.track.syncedLyrics) {
+                                return Number(!!b.track.syncedLyrics) - Number(!!a.track.syncedLyrics);
+                            }
+                            if (b.compatibilidade.total !== a.compatibilidade.total) {
+                                return b.compatibilidade.total - a.compatibilidade.total;
+                            }
+                            return b.score - a.score;
+                        });
+
+                    const comSync = candidatosValidos.find((item) => item.track.syncedLyrics);
                     if (comSync) {
                         resolvido = true;
-                        resolve(comSync);
-                    } else if (!melhorResultadoSemSync) {
-                        melhorResultadoSemSync = data[0];
+                        resolve(comSync.track);
+                    } else if (!melhorResultadoSemSync && candidatosValidos[0]) {
+                        melhorResultadoSemSync = candidatosValidos[0].track;
                     }
                 }
 
