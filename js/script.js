@@ -609,14 +609,15 @@ function pontuarResultadoMusica(item, termoBusca) {
     return { score, meta };
 }
 
-function renderizarPainelLetraSync(indiceAtual, progresso = 0) {
+function renderizarPainelLetraSync(indiceAtual, progresso = 0, tempoAtual = 0) {
     const divLetra = document.getElementById("divLetra");
     if (!divLetra) return;
 
     divLetra.classList.add("letra-sync-painel");
 
     const anterior = indiceAtual > 0 ? linhasSincronizadas[indiceAtual - 1]?.texto || "" : "";
-    const atual = indiceAtual >= 0 ? linhasSincronizadas[indiceAtual]?.texto || "" : "";
+    const linhaAtualObj = indiceAtual >= 0 ? linhasSincronizadas[indiceAtual] || null : null;
+    const atual = linhaAtualObj?.texto || "";
     const proxima = linhasSincronizadas[indiceAtual + 1]?.texto || "";
     const primeira = linhasSincronizadas[0]?.texto || "";
     const chaveAtual = String(indiceAtual);
@@ -631,10 +632,13 @@ function renderizarPainelLetraSync(indiceAtual, progresso = 0) {
                 </div>
             `;
         } else {
+            const htmlAtual = linhaAtualObj && linhaAtualObj.palavras?.length
+                ? montarHtmlLinhaSync(linhaAtualObj, tempoAtual || linhaAtualObj.tempo)
+                : `<span class="texto-fill">${escaparHtml(atual)}</span>`;
             divLetra.innerHTML = `
                 <div class="sync-stack">
                     <div class="sync-linha sync-linha-anterior">${escaparHtml(anterior)}</div>
-                    <div class="sync-linha sync-linha-atual"><span class="texto-fill">${escaparHtml(atual)}</span></div>
+                    <div class="sync-linha sync-linha-atual">${htmlAtual}</div>
                     <div class="sync-linha sync-linha-proxima">${escaparHtml(proxima)}</div>
                 </div>
             `;
@@ -645,8 +649,33 @@ function renderizarPainelLetraSync(indiceAtual, progresso = 0) {
 
     const linhaAtual = divLetra.querySelector(".sync-linha-atual");
     if (linhaAtual) {
-        linhaAtual.style.setProperty("--active-progress", `${progresso}%`);
+        if (linhaAtualObj && linhaAtualObj.palavras?.length) {
+            linhaAtual.innerHTML = montarHtmlLinhaSync(linhaAtualObj, tempoAtual);
+        } else {
+            linhaAtual.style.setProperty("--active-progress", `${progresso}%`);
+        }
     }
+}
+
+function montarHtmlLinhaSync(linha, tempoAtual) {
+    if (!linha?.palavras?.length) {
+        return `<span class="texto-fill">${escaparHtml(linha?.texto || "")}</span>`;
+    }
+
+    return linha.palavras.map((palavra, indice) => {
+        const inicio = palavra.tempo;
+        const proximaPalavra = linha.palavras[indice + 1];
+        const fim = proximaPalavra?.tempo || linha.tempoFinal || (inicio + 0.35);
+        let classe = "palavra-sync";
+
+        if (tempoAtual >= fim) {
+            classe += " palavra-passada";
+        } else if (tempoAtual >= inicio) {
+            classe += " palavra-ativa";
+        }
+
+        return `<span class="${classe}">${escaparHtml(palavra.texto)}</span>`;
+    }).join("");
 }
 
 // ============================================================
@@ -674,7 +703,7 @@ function iniciarSyncLetra() {
             }
 
             if (ativa < 0) {
-                renderizarPainelLetraSync(-1, 0);
+                renderizarPainelLetraSync(-1, 0, tempo);
                 const primeiraLinha = linhasSincronizadas[0];
                 atualizarStatusSincronia("Letra sincronizada pronta.");
                 return;
@@ -684,7 +713,7 @@ function iniciarSyncLetra() {
             const proximaLinha = linhasSincronizadas[ativa + 1] || null;
             const duracaoLinha = proximaLinha ? Math.max(proximaLinha.tempo - linhaAtual.tempo, 0.35) : 2.5;
             const progresso = Math.max(0, Math.min(((tempo - linhaAtual.tempo) / duracaoLinha) * 100, 100));
-            renderizarPainelLetraSync(ativa, progresso);
+            renderizarPainelLetraSync(ativa, progresso, tempo);
 
             ultimaLinhaAtiva = ativa;
 
@@ -1156,8 +1185,40 @@ async function buscarLetra(canalYoutube, tituloVideo) {
                 linhasSincronizadas.push({ tempo: tempo, texto: texto });
             });
 
+            let indiceLinhaSync = 0;
+            lines.forEach((linha) => {
+                const match = linha.match(/\[(\d{1,2}):(\d{2}(?:\.\d{2})?)\](.*)/);
+                if (!match) return;
+
+                const linhaSync = linhasSincronizadas[indiceLinhaSync];
+                indiceLinhaSync++;
+                if (!linhaSync) return;
+
+                const conteudoBruto = match[3] || "";
+                const palavras = [];
+                const regexPalavra = /<(\d{2}):(\d{2}(?:\.\d{2,3})?)>([^<]*)/g;
+                let trecho = null;
+
+                while ((trecho = regexPalavra.exec(conteudoBruto)) !== null) {
+                    const tempoPalavra = (parseInt(trecho[1], 10) * 60) + parseFloat(trecho[2]);
+                    const textoPalavra = trecho[3] || "";
+
+                    if (textoPalavra) {
+                        palavras.push({ tempo: tempoPalavra, texto: textoPalavra });
+                    }
+                }
+
+                linhaSync.texto = linhaSync.texto.trim() || "♪";
+                linhaSync.palavras = palavras;
+            });
+
+            linhasSincronizadas.forEach((linhaAtual, indice) => {
+                const proximaLinha = linhasSincronizadas[indice + 1];
+                linhaAtual.tempoFinal = proximaLinha?.tempo || (linhaAtual.tempo + 2.5);
+            });
+
             if (linhasSincronizadas.length > 0) {
-                renderizarPainelLetraSync(-1, 0);
+                renderizarPainelLetraSync(-1, 0, 0);
             } else {
                 divLetra.classList.remove("letra-sync-painel");
                 divLetra.innerHTML = "<p>Letra sincronizada carregada.</p>";
