@@ -3,9 +3,10 @@ const YOUTUBE_API_KEY = "AIzaSyBhpdlWVIHHVDOg9rRBWMc5uyAAcEoqazA";
 const SUPABASE_URL = "https://ybantvgcrelqwvyjvksj.supabase.co";
 const SUPABASE_KEY = "sb_publishable_YOnl_Qc5PQ5o9229nVx8Yg_ArNvGUHS";
 const SUPABASE_TABLE = "ranking";
+const SUPABASE_LYRICS_TABLE = "lyrics_cache";
 const SUPABASE_REST_PATH = "/rest/v1";
 const RANKING_STORAGE_KEY = "rankingLocal";
-const LYRICS_CACHE_KEY = "lyricsCacheV1";
+const LYRICS_CACHE_KEY = "lyricsCacheV2";
 const RESULTADO_ATUAL_ID_KEY = "resultadoAtualId";
 const RESULTADO_PROCESSADO_KEY = "ultimoResultadoProcessado";
 const RESULTADO_REMOTO_KEY = "ultimoResultadoRemoto";
@@ -163,6 +164,90 @@ function salvarLetraNoCache(chaves = [], payload = null) {
     );
 
     salvarLyricsCache(enxuto);
+}
+
+function tituloCompativelComBusca(tituloReferencia = "", tentativas = []) {
+    const tituloNorm = normalizarComparacao(tituloReferencia);
+    if (!tituloNorm) return false;
+
+    return tentativas.some((tentativa) => {
+        const musicaNorm = normalizarComparacao(tentativa.song || "");
+        if (!musicaNorm) return false;
+        if (tituloNorm === musicaNorm) return true;
+        if (tituloNorm.includes(musicaNorm) || musicaNorm.includes(tituloNorm)) return true;
+
+        const tokens = musicaNorm.split(" ").filter((token) => token.length > 2);
+        if (tokens.length === 0) return false;
+
+        const encontrados = tokens.filter((token) => tituloNorm.includes(token)).length;
+        return encontrados === tokens.length && tokens.length >= 2;
+    });
+}
+
+function cacheLetraEhCompativel(cacheHit, tituloLimpo, tentativas) {
+    if (!cacheHit) return false;
+    if (!cacheHit.titulo) return true;
+    return tituloCompativelComBusca(cacheHit.titulo, [{ song: tituloLimpo, artist: "" }, ...tentativas]);
+}
+
+async function buscarLetraSupabase(tentativas = []) {
+    const chaves = criarChavesCacheLetra("", "", tentativas);
+    if (chaves.length === 0) return null;
+
+    const filtros = chaves.map((chave) => `cache_key.eq.${encodeURIComponent(chave)}`).join(",");
+    const query = `select=cache_key,titulo,artista,plain_lyrics,synced_lyrics,source,updated_at&or=(${filtros})&order=updated_at.desc&limit=1`;
+    const resposta = await fetch(montarUrlSupabase(SUPABASE_LYRICS_TABLE, query), {
+        headers: obterHeadersSupabase()
+    });
+
+    if (!resposta.ok) {
+        const erroTexto = await resposta.text();
+        throw criarErroSupabase("lyrics_select", resposta, erroTexto);
+    }
+
+    const data = await resposta.json();
+    if (!Array.isArray(data) || data.length === 0) return null;
+
+    const item = data[0];
+    return {
+        titulo: item.titulo || "",
+        artista: item.artista || "",
+        plainLyrics: item.plain_lyrics || "",
+        syncedLyrics: item.synced_lyrics || "",
+        source: item.source || "supabase",
+        updatedAt: item.updated_at || ""
+    };
+}
+
+async function salvarLetraSupabase(chaves = [], payload = null) {
+    if (!payload || chaves.length === 0) return;
+
+    const registros = chaves.map((cacheKey) => ({
+        cache_key: cacheKey,
+        titulo: payload.titulo || "",
+        artista: payload.artista || "",
+        plain_lyrics: payload.plainLyrics || "",
+        synced_lyrics: payload.syncedLyrics || "",
+        source: payload.source || "desconhecida",
+        updated_at: new Date().toISOString()
+    }));
+
+    try {
+        const resposta = await fetch(montarUrlSupabase(SUPABASE_LYRICS_TABLE), {
+            method: "POST",
+            headers: obterHeadersSupabase({
+                Prefer: "resolution=merge-duplicates,return=minimal"
+            }),
+            body: JSON.stringify(registros)
+        });
+
+        if (!resposta.ok) {
+            const erroTexto = await resposta.text();
+            throw criarErroSupabase("lyrics_upsert", resposta, erroTexto);
+        }
+    } catch (erro) {
+        logErroPadrao("Supabase lyrics upsert", erro);
+    }
 }
 
 function obterInicioDoDiaISO() {
@@ -1226,7 +1311,8 @@ function analisarCompatibilidadeLetra(track, tentativas) {
     });
 
     const precisaValidarArtista = tentativas.some((tentativa) => (tentativa.artist || "").trim().length > 0);
-    const aceito = melhor.tituloScore >= 70 && (!precisaValidarArtista || melhor.artistaScore >= 65);
+    const tituloAceito = melhor.tituloScore >= 70 && tituloCompativelComBusca(track?.trackName || track?.name || "", tentativas);
+    const aceito = tituloAceito && (!precisaValidarArtista || melhor.artistaScore >= 65);
 
     return {
         ...melhor,
@@ -1637,7 +1723,22 @@ async function buscarLetra(canalYoutube, tituloVideo) {
     const cacheKeys = criarChavesCacheLetra(tituloLimpo, canalYoutube, tentativas);
 
     try {
-        const cacheHit = buscarLetraNoCache(cacheKeys);
+        let cacheHit = buscarLetraNoCache(cacheKeys);
+        if (!cacheLetraEhCompativel(cacheHit, tituloLimpo, tentativas)) {
+            cacheHit = null;
+        }
+
+        if (!cacheHit) {
+            try {
+                const supabaseHit = await buscarLetraSupabase([{ song: tituloLimpo, artist: canalYoutube }, ...tentativas]);
+                if (cacheLetraEhCompativel(supabaseHit, tituloLimpo, tentativas)) {
+                    cacheHit = supabaseHit;
+                    salvarLetraNoCache(cacheKeys, supabaseHit);
+                }
+            } catch (erro) {
+                logErroPadrao("Supabase lyrics select", erro);
+            }
+        }
 
         if (cacheHit?.syncedLyrics) {
             document.getElementById("painelSync").style.display = "flex";
@@ -1670,13 +1771,15 @@ async function buscarLetra(canalYoutube, tituloVideo) {
             document.getElementById("painelSync").style.display = "flex";
             atualizarStatusSincronia("Letra sincronizada encontrada. Aperte play para cantar no tempo.");
             carregarLinhasSincronizadasDoLrc(track.syncedLyrics);
-            salvarLetraNoCache(cacheKeys, {
+            const payload = {
                 source: "lrclib",
                 plainLyrics: track.plainLyrics || "",
                 syncedLyrics: track.syncedLyrics || "",
                 titulo: tituloLimpo,
                 artista: canalYoutube
-            });
+            };
+            salvarLetraNoCache(cacheKeys, payload);
+            salvarLetraSupabase(cacheKeys, payload);
 
             if (linhasSincronizadas.length > 0) {
                 renderizarPainelLetraSync(-1, 0, 0);
@@ -1693,13 +1796,15 @@ async function buscarLetra(canalYoutube, tituloVideo) {
         }
 
         if (track && track.plainLyrics) {
-            salvarLetraNoCache(cacheKeys, {
+            const payload = {
                 source: "lrclib-plain",
                 plainLyrics: track.plainLyrics || "",
                 syncedLyrics: "",
                 titulo: tituloLimpo,
                 artista: canalYoutube
-            });
+            };
+            salvarLetraNoCache(cacheKeys, payload);
+            salvarLetraSupabase(cacheKeys, payload);
             renderizarLetraSemSync(
                 divLetra,
                 track.plainLyrics,
@@ -1713,13 +1818,15 @@ async function buscarLetra(canalYoutube, tituloVideo) {
         const ovhLyrics = await buscarNaLyricsOvh(tentativas);
 
         if (ovhLyrics) {
-            salvarLetraNoCache(cacheKeys, {
+            const payload = {
                 source: "lyricsovh",
                 plainLyrics: ovhLyrics || "",
                 syncedLyrics: "",
                 titulo: tituloLimpo,
                 artista: canalYoutube
-            });
+            };
+            salvarLetraNoCache(cacheKeys, payload);
+            salvarLetraSupabase(cacheKeys, payload);
             renderizarLetraSemSync(
                 divLetra,
                 ovhLyrics,
