@@ -1055,6 +1055,11 @@ function calcularScoreCompatibilidadeLetra(track, tentativas) {
 function analisarCompatibilidadeLetra(track, tentativas) {
     const tituloTrack = limparSegmentoMusical(track?.trackName || track?.name || "");
     const artistaTrack = limparSegmentoMusical(track?.artistName || track?.artist || "");
+    const contextoTrack = normalizarComparacao([
+        track?.trackName || track?.name || "",
+        track?.artistName || track?.artist || "",
+        track?.albumName || track?.album || ""
+    ].join(" "));
     const tituloNorm = normalizarComparacao(tituloTrack);
     const artistaNorm = normalizarComparacao(artistaTrack);
     let melhor = {
@@ -1087,6 +1092,17 @@ function analisarCompatibilidadeLetra(track, tentativas) {
             else {
                 const tokensArtista = artistaTentativaNorm.split(" ").filter((token) => token.length > 2);
                 artistaScore = tokensArtista.filter((token) => artistaNorm.includes(token)).length * 14;
+            }
+        }
+
+        if (artistaScore < 65 && artistaTentativaNorm && contextoTrack) {
+            const tokensContexto = artistaTentativaNorm.split(" ").filter((token) => token.length > 2);
+            const tokensEncontrados = tokensContexto.filter((token) => contextoTrack.includes(token)).length;
+
+            if (tokensEncontrados === tokensContexto.length && tokensContexto.length > 0) {
+                artistaScore = Math.max(artistaScore, 65);
+            } else if (tokensEncontrados > 0) {
+                artistaScore = Math.max(artistaScore, tokensEncontrados * 18);
             }
         }
 
