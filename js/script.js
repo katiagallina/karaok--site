@@ -101,7 +101,7 @@ function salvarRankingLocal(registro) {
     const rankingAtual = getRankingLocal();
     rankingAtual.push(registro);
     rankingAtual.sort((a, b) => (b.pontuacao || 0) - (a.pontuacao || 0));
-    localStorage.setItem(RANKING_STORAGE_KEY, JSON.stringify(rankingAtual.slice(0, 20)));
+    localStorage.setItem(RANKING_STORAGE_KEY, JSON.stringify(rankingAtual.slice(0, 50)));
 }
 
 function getLyricsCache() {
@@ -272,9 +272,9 @@ async function inserirPontuacaoSupabase(registro) {
     return resposta.json();
 }
 
-async function buscarRankingSupabase() {
+async function buscarRankingSupabase(modo = "livre") {
     const inicioDoDia = obterInicioDoDiaISO();
-    const query = `select=nome,pontuacao,musica,modo,created_at&modo=eq.livre&created_at=gte.${encodeURIComponent(inicioDoDia)}&order=pontuacao.desc,created_at.asc&limit=10`;
+    const query = `select=nome,pontuacao,musica,modo,created_at&modo=eq.${encodeURIComponent(modo)}&created_at=gte.${encodeURIComponent(inicioDoDia)}&order=pontuacao.desc,created_at.asc&limit=10`;
     const resposta = await fetch(montarUrlSupabase(SUPABASE_TABLE, query), {
         headers: obterHeadersSupabase()
     });
@@ -339,6 +339,34 @@ async function sincronizarResultadoLivre() {
     }
 }
 
+async function sincronizarResultadoDesafio() {
+    const j1 = localStorage.getItem("jogador1") || "Jogador 1";
+    const j2 = localStorage.getItem("jogador2") || "Jogador 2";
+    const pts1 = parseInt(localStorage.getItem("pontuacaoJ1") || "0", 10) || 0;
+    const pts2 = parseInt(localStorage.getItem("pontuacaoJ2") || "0", 10) || 0;
+    const musica = localStorage.getItem("musicaNome") || "Musica duelo";
+    const resultadoId = localStorage.getItem(RESULTADO_ATUAL_ID_KEY) || gerarResultadoAtualId();
+
+    const ultimoProcessado = localStorage.getItem("ultimoDesafioProcessado");
+    if (ultimoProcessado === resultadoId) return { remoto: true, duplicado: true };
+
+    const reg1 = { nome: j1, pontuacao: pts1, musica, modo: "desafio", created_at: new Date().toISOString() };
+    const reg2 = { nome: j2, pontuacao: pts2, musica, modo: "desafio", created_at: new Date().toISOString() };
+
+    salvarRankingLocal(reg1);
+    salvarRankingLocal(reg2);
+    localStorage.setItem("ultimoDesafioProcessado", resultadoId);
+
+    try {
+        await inserirPontuacaoSupabase(reg1);
+        await inserirPontuacaoSupabase(reg2);
+        return { remoto: true };
+    } catch (erro) {
+        logErroPadrao("Supabase ranking desafio insert", erro);
+        return { remoto: false, erro };
+    }
+}
+
 function renderizarRanking(lista, origem = "local") {
     const ul = document.getElementById("listaRanking");
     if (!ul) return;
@@ -360,44 +388,99 @@ function inicializarPaginaResultado() {
     const nomeFinal = document.getElementById("nomeFinal");
     const pontuacaoFinal = document.getElementById("pontuacaoFinal");
     const avaliacao = document.getElementById("avaliacao");
-    const nome = localStorage.getItem("nome") || "Cantor(a)";
+    const modo = localStorage.getItem("modoAtual") || "livre";
     const musica = localStorage.getItem("musicaNome") || "";
-    const pontuacao = parseInt(localStorage.getItem("pontuacaoFinal") || "0", 10) || 0;
 
-    if (nomeFinal) {
-        nomeFinal.innerText = musica ? `${nome} cantou: ${musica}` : nome;
-    }
+    if (modo === "desafio") {
+        const j1 = localStorage.getItem("jogador1") || "Jogador 1";
+        const j2 = localStorage.getItem("jogador2") || "Jogador 2";
+        const pts1 = parseInt(localStorage.getItem("pontuacaoJ1") || "0", 10);
+        const pts2 = parseInt(localStorage.getItem("pontuacaoJ2") || "0", 10);
 
-    if (pontuacaoFinal) {
-        pontuacaoFinal.innerHTML = `&#11088; ${pontuacao}`;
-    }
+        if (nomeFinal) {
+            nomeFinal.innerHTML = `Duelo finalizado:<br><small>${escaparHtml(musica)}</small><br><br><span style="font-size:1.3rem">${escaparHtml(j1)}: ${pts1} pts<br>${escaparHtml(j2)}: ${pts2} pts</span>`;
+        }
 
-    if (avaliacao) {
-        avaliacao.innerText = gerarAvaliacao(pontuacao);
-    }
-
-    if ((localStorage.getItem("modoAtual") || "livre") === "livre") {
-        sincronizarResultadoLivre().then((resultado) => {
-            if (!avaliacao) return;
-            if (resultado.remoto) {
-                avaliacao.innerText += " Resultado sincronizado com o ranking online.";
+        if (pontuacaoFinal) {
+            if (pts1 > pts2) {
+                pontuacaoFinal.innerHTML = `&#127942; Vencedor: ${escaparHtml(j1)}!`;
+            } else if (pts2 > pts1) {
+                pontuacaoFinal.innerHTML = `&#127942; Vencedor: ${escaparHtml(j2)}!`;
             } else {
-                avaliacao.innerText += " Resultado salvo localmente enquanto o ranking online nao responde.";
+                pontuacaoFinal.innerHTML = `&#129309; Empate!`;
             }
-        });
+        }
+
+        if (avaliacao) {
+            avaliacao.innerText = "Que duelo incrivel! Ambos mandaram muito bem.";
+            sincronizarResultadoDesafio().then((resultado) => {
+                if (resultado.remoto) {
+                    avaliacao.innerText += " Pontuacoes salvas no ranking online!";
+                } else {
+                    avaliacao.innerText += " Pontuacoes salvas localmente enquanto o ranking online nao responde.";
+                }
+            });
+        }
+    } else {
+        const nome = localStorage.getItem("nome") || "Cantor(a)";
+        const pontuacao = parseInt(localStorage.getItem("pontuacaoFinal") || "0", 10) || 0;
+
+        if (nomeFinal) {
+            nomeFinal.innerText = musica ? `${nome} cantou: ${musica}` : nome;
+        }
+
+        if (pontuacaoFinal) {
+            pontuacaoFinal.innerHTML = `&#11088; ${pontuacao}`;
+        }
+
+        if (avaliacao) {
+            avaliacao.innerText = gerarAvaliacao(pontuacao);
+        }
+
+        if (modo === "livre") {
+            sincronizarResultadoLivre().then((resultado) => {
+                if (!avaliacao) return;
+                if (resultado.remoto) {
+                    avaliacao.innerText += " Resultado sincronizado com o ranking online.";
+                } else {
+                    avaliacao.innerText += " Resultado salvo localmente enquanto o ranking online nao responde.";
+                }
+            });
+        }
     }
+}
+
+let modoRankingAtual = "livre";
+
+async function mudarAbaRanking(modo) {
+    modoRankingAtual = modo;
+    
+    const btnLivre = document.getElementById("btnTabLivre");
+    const btnDesafio = document.getElementById("btnTabDesafio");
+    
+    if (btnLivre && btnDesafio) {
+        if (modo === "livre") {
+            btnLivre.classList.add("ativa");
+            btnDesafio.classList.remove("ativa");
+        } else {
+            btnLivre.classList.remove("ativa");
+            btnDesafio.classList.add("ativa");
+        }
+    }
+    
+    await inicializarPaginaRanking();
 }
 
 async function inicializarPaginaRanking() {
     const local = getRankingLocal()
-        .filter((item) => item.modo === "livre")
+        .filter((item) => item.modo === modoRankingAtual)
         .sort((a, b) => (b.pontuacao || 0) - (a.pontuacao || 0))
         .slice(0, 10);
 
     renderizarRanking(local, "local");
 
     try {
-        const remoto = await buscarRankingSupabase();
+        const remoto = await buscarRankingSupabase(modoRankingAtual);
         if (Array.isArray(remoto) && remoto.length > 0) {
             renderizarRanking(remoto, "supabase");
         }
@@ -426,6 +509,10 @@ window.addEventListener("DOMContentLoaded", () => {
     if (pagina.endsWith("ranking.html")) {
         inicializarPaginaRanking();
     }
+
+    if (pagina.endsWith("vs.html")) {
+        inicializarPaginaVS();
+    }
 });
 
 // ============================================================
@@ -433,7 +520,14 @@ window.addEventListener("DOMContentLoaded", () => {
 // ============================================================
 if (pagina.includes("karaoke.html")) {
     window.addEventListener("DOMContentLoaded", () => {
+        let modo = localStorage.getItem("modoAtual");
         let nome = localStorage.getItem("nome");
+
+        if (modo === "desafio") {
+            let turno = localStorage.getItem("turnoAtual") || "1";
+            nome = turno === "1" ? localStorage.getItem("jogador1") : localStorage.getItem("jogador2");
+        }
+
         let musicaNome = localStorage.getItem("musicaNome");
         let musicaArtista = localStorage.getItem("musicaArtista");
         let musicaCanalYoutube = localStorage.getItem("musicaCanalYoutube");
@@ -600,7 +694,25 @@ function finalizar(automatico = false) {
         ytPlayer.stopVideo();
     }
 
-    localStorage.setItem("pontuacaoFinal", String(obterPontuacaoAtual()));
+    let pontuacao = String(obterPontuacaoAtual());
+    localStorage.setItem("pontuacaoFinal", pontuacao);
+
+    let modo = localStorage.getItem("modoAtual");
+    if (modo === "desafio") {
+        let turno = localStorage.getItem("turnoAtual") || "1";
+        if (turno === "1") {
+            localStorage.setItem("pontuacaoJ1", pontuacao);
+            localStorage.setItem("turnoAtual", "2");
+            clearInterval(syncInterval);
+            clearInterval(progressInterval);
+            clearInterval(pontuacaoInterval);
+            window.location.href = "vs.html";
+            return;
+        } else {
+            localStorage.setItem("pontuacaoJ2", pontuacao);
+        }
+    }
+
     localStorage.setItem(RESULTADO_ATUAL_ID_KEY, gerarResultadoAtualId());
     clearInterval(syncInterval);
     clearInterval(progressInterval);
@@ -963,8 +1075,13 @@ function iniciarSyncLetra() {
 
             const linhaAtual = linhasSincronizadas[ativa];
             const proximaLinha = linhasSincronizadas[ativa + 1] || null;
-            const duracaoLinha = proximaLinha ? Math.max(proximaLinha.tempo - linhaAtual.tempo, 0.35) : 2.5;
-            const progresso = Math.max(0, Math.min(((tempo - linhaAtual.tempo) / duracaoLinha) * 100, 100));
+            
+            // Evita lentidão no destaque estimando o tempo real de canto pelo número de letras
+            const tempoAteProxima = proximaLinha ? Math.max(proximaLinha.tempo - linhaAtual.tempo, 0.35) : 3.0;
+            const duracaoEstimada = Math.max(1.5, (linhaAtual.texto || "").length * 0.08);
+            const duracaoParaPreenchimento = Math.min(tempoAteProxima, duracaoEstimada);
+            
+            const progresso = Math.max(0, Math.min(((tempo - linhaAtual.tempo) / duracaoParaPreenchimento) * 100, 100));
             renderizarPainelLetraSync(ativa, progresso, tempo);
 
             ultimaLinhaAtiva = ativa;
@@ -1147,12 +1264,58 @@ function irParaVS() {
         alert("Por favor, pesquise e selecione uma música primeiro!");
         return;
     }
+    localStorage.setItem("turnoAtual", "1");
     window.location.href = "vs.html";
 }
 
 function iniciarDuelo() {
     localStorage.setItem("modoAtual", "desafio");
     window.location.href = "karaoke.html";
+}
+
+function inicializarPaginaVS() {
+    let j1 = localStorage.getItem("jogador1") || "Jogador 1";
+    let j2 = localStorage.getItem("jogador2") || "Jogador 2";
+    let j1El = document.getElementById("j1");
+    let j2El = document.getElementById("j2");
+    if (j1El) j1El.innerText = j1;
+    if (j2El) j2El.innerText = j2;
+    
+    let turno = localStorage.getItem("turnoAtual") || "1";
+    let infoTurno = document.getElementById("infoTurno"); 
+    if (!infoTurno) {
+        infoTurno = document.createElement("h2");
+        infoTurno.id = "infoTurno";
+        infoTurno.style.color = "var(--neon-green)";
+        let container = document.querySelector(".container");
+        if (container) {
+            let botoes = container.querySelector(".botoes");
+            if (botoes) container.insertBefore(infoTurno, botoes);
+        }
+    }
+    
+    let subTextoTurno = document.getElementById("subTextoTurno");
+    if (!subTextoTurno) {
+        subTextoTurno = document.createElement("p");
+        subTextoTurno.id = "subTextoTurno";
+        let container = document.querySelector(".container");
+        if (container) {
+            let botoes = container.querySelector(".botoes");
+            if (botoes) container.insertBefore(subTextoTurno, botoes);
+        }
+    }
+    
+    let btnCantar = document.querySelector("button[onclick='iniciarDuelo()']");
+    if (turno === "1") {
+        infoTurno.innerText = `${j1} canta primeiro!`;
+        subTextoTurno.innerText = "Preparem-se para o duelo.";
+        if (btnCantar) btnCantar.innerText = `🎤 Começar vez de ${j1}`;
+    } else {
+        let pts1 = localStorage.getItem("pontuacaoJ1") || "0";
+        infoTurno.innerText = `Agora é a vez de ${j2}!`;
+        subTextoTurno.innerHTML = `A pontuação de ${j1} foi: <strong>${pts1} pts</strong>`;
+        if (btnCantar) btnCantar.innerText = `🎤 Começar vez de ${j2}`;
+    }
 }
 
 // Variavel para atraso manual da letra
@@ -1613,7 +1776,7 @@ function carregarLinhasSincronizadasDoLrc(lrc) {
         const m = parseInt(match[1], 10);
         const s = parseFloat(match[2]);
         const tempo = (m * 60) + s;
-        let texto = match[3].trim() || "â™ª";
+        let texto = match[3].trim() || "♪";
 
         texto = texto.replace(/<\d{2}:\d{2}(?:\.\d{2,3})?>/g, "");
         linhasSincronizadas.push({ tempo, texto });
@@ -1642,7 +1805,7 @@ function carregarLinhasSincronizadasDoLrc(lrc) {
             }
         }
 
-        linhaSync.texto = linhaSync.texto.trim() || "â™ª";
+        linhaSync.texto = linhaSync.texto.trim() || "♪";
         linhaSync.palavras = palavras;
     });
 
@@ -1725,9 +1888,9 @@ async function buscarLetra(canalYoutube, tituloVideo) {
         painel.className = "painel-sync";
         painel.innerHTML = `
             <span>Sincronia:</span>
-            <button onclick="mudarOffset(-1)" class="painel-sync-btn">-1s</button>
+            <button onclick="mudarOffset(-0.5)" class="painel-sync-btn">-0.5s</button>
             <span id="txtOffset">0s</span>
-            <button onclick="mudarOffset(1)" class="painel-sync-btn">+1s</button>
+            <button onclick="mudarOffset(0.5)" class="painel-sync-btn">+0.5s</button>
         `;
         divLetra.parentNode.insertBefore(painel, divLetra);
     } else {
@@ -1846,9 +2009,9 @@ async function buscarLetra(canalYoutube, tituloVideo) {
         painel.className = "painel-sync";
         painel.innerHTML = `
             <span>Sincronia:</span>
-            <button onclick="mudarOffset(-1)" class="painel-sync-btn">-1s</button>
+            <button onclick="mudarOffset(-0.5)" class="painel-sync-btn">-0.5s</button>
             <span id="txtOffset">0s</span>
-            <button onclick="mudarOffset(1)" class="painel-sync-btn">+1s</button>
+            <button onclick="mudarOffset(0.5)" class="painel-sync-btn">+0.5s</button>
         `;
         divLetra.parentNode.insertBefore(painel, divLetra);
     } else {
@@ -1984,7 +2147,8 @@ async function buscarLetra(canalYoutube, tituloVideo) {
 
 function mudarOffset(valor) {
     offsetLetra += valor;
-    document.getElementById("txtOffset").innerText = (offsetLetra > 0 ? "+" : "") + offsetLetra + "s";
+    let sinal = offsetLetra > 0 ? "+" : "";
+    document.getElementById("txtOffset").innerText = offsetLetra === 0 ? "0s" : sinal + offsetLetra.toFixed(1) + "s";
 }
 
 

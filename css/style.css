@@ -401,6 +401,37 @@ button.btn:hover {
     box-shadow: 0 0 20px rgba(250, 204, 21, 0.5);
 }
 
+/* TABS RANKING */
+.tabs-ranking {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    margin-bottom: 5px;
+    width: 100%;
+    max-width: 460px;
+}
+
+.btn-tab {
+    flex: 1;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(0, 229, 255, 0.2);
+    color: var(--text-muted);
+    padding: 8px 12px;
+    border-radius: 50px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-family: 'Poppins', sans-serif;
+    font-weight: 600;
+    transition: all 0.3s ease;
+}
+
+.btn-tab.ativa {
+    background: var(--neon-blue);
+    color: var(--dark-bg-1);
+    box-shadow: 0 0 15px var(--neon-blue);
+    border-color: var(--neon-blue);
+}
+
 /* VS (duelo) */
 .vs {
     font-size: 6rem;
