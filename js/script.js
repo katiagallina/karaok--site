@@ -786,16 +786,71 @@ function extrairMetadadosBusca(textoBusca) {
     };
 }
 
+function extrairTokensRelevantesBusca(termoBusca = "") {
+    const metaBusca = extrairMetadadosBusca(termoBusca);
+    const base = [metaBusca.buscaLimpa, metaBusca.artista, metaBusca.musica]
+        .filter(Boolean)
+        .join(" ");
+
+    const ignorar = new Set([
+        "a", "o", "as", "os", "de", "da", "do", "das", "dos", "e", "em", "para", "por",
+        "com", "sem", "no", "na", "nos", "nas", "um", "uma"
+    ]);
+
+    return Array.from(new Set(
+        normalizarComparacao(base)
+            .split(" ")
+            .filter((token) => token.length > 2 && !ignorar.has(token))
+    ));
+}
+
+function contarTokensDaBuscaNoTexto(texto = "", tokensBusca = []) {
+    const textoNorm = normalizarComparacao(texto);
+    if (!textoNorm || tokensBusca.length === 0) return 0;
+    return tokensBusca.filter((token) => textoNorm.includes(token)).length;
+}
+
+function resultadoCombinaComBusca(meta, termoBusca = "") {
+    const tokensBusca = extrairTokensRelevantesBusca(termoBusca);
+    if (tokensBusca.length === 0) return true;
+
+    const textoComparacao = [
+        meta?.tituloBruto || "",
+        meta?.tituloExibicao || "",
+        meta?.artistaProvavel || "",
+        meta?.musicaProvavel || "",
+        meta?.canalBruto || ""
+    ].join(" ");
+
+    const encontrados = contarTokensDaBuscaNoTexto(textoComparacao, tokensBusca);
+    const minimo = tokensBusca.length <= 2 ? tokensBusca.length : Math.max(2, tokensBusca.length - 1);
+
+    return encontrados >= minimo;
+}
+
 function pontuarResultadoMusica(item, termoBusca) {
     const meta = extrairMetadadosMusica(item?.snippet?.title || "", item?.snippet?.channelTitle || "");
     const tituloNorm = normalizarComparacao(meta.tituloExibicao || meta.tituloBruto);
     const termoNorm = normalizarComparacao(termoBusca);
+    const tokensBusca = extrairTokensRelevantesBusca(termoBusca);
     const tokens = termoNorm.split(" ").filter((token) => token.length > 1);
     let score = 0;
 
     if (termoNorm && tituloNorm.includes(termoNorm)) score += 40;
     if (tokens.length > 0) {
         score += tokens.filter((token) => tituloNorm.includes(token)).length * 8;
+    }
+    if (tokensBusca.length > 0) {
+        const textoComparacao = [
+            meta.tituloBruto,
+            meta.tituloExibicao,
+            meta.artistaProvavel,
+            meta.musicaProvavel,
+            meta.canalBruto
+        ].join(" ");
+        const encontrados = contarTokensDaBuscaNoTexto(textoComparacao, tokensBusca);
+        score += encontrados * 14;
+        if (encontrados === tokensBusca.length) score += 50;
     }
 
     if (/\b(karaoke|playback|instrumental)\b/i.test(meta.tituloBruto)) score += 25;
@@ -936,8 +991,14 @@ async function buscarMusica() {
 
     div.innerHTML = "Buscando...";
     localStorage.setItem("musicaBuscaOriginal", termo);
+    localStorage.removeItem("musicaAudio");
+    localStorage.removeItem("musicaSelecionada");
+    localStorage.removeItem("musicaNome");
+    localStorage.removeItem("musicaArtista");
+    localStorage.removeItem("musicaCanalYoutube");
+    localStorage.removeItem("musicaTituloOriginal");
 
-    let url = `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${encodeURIComponent(termo + " karaoke playback instrumental")}&type=video&videoEmbeddable=true&videoSyndicated=true&key=${YOUTUBE_API_KEY}&maxResults=12`;
+    let url = `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${encodeURIComponent(`"${termo}" karaoke instrumental`)}&type=video&videoEmbeddable=true&videoSyndicated=true&key=${YOUTUBE_API_KEY}&maxResults=18`;
 
     try {
         let res = await fetch(url);
@@ -957,12 +1018,27 @@ async function buscarMusica() {
 function renderizarListaMusicas(items, div) {
     div.innerHTML = "";
     const termoBusca = document.getElementById("buscaMusica")?.value.trim() || "";
-    const itensOrdenados = items
+    const candidatosPontuados = items
         .filter((m) => m.id && m.id.videoId)
         .map((m) => ({ original: m, ...pontuarResultadoMusica(m, termoBusca) }))
-        .sort((a, b) => b.score - a.score)
+        .sort((a, b) => b.score - a.score);
+
+    let itensOrdenados = candidatosPontuados
+        .filter((item) => resultadoCombinaComBusca(item.meta, termoBusca))
         .slice(0, LIMITE_RESULTADOS_BUSCA)
         .map((item) => item.original);
+
+    if (itensOrdenados.length === 0) {
+        itensOrdenados = candidatosPontuados
+            .filter((item) => item.score >= 35)
+            .slice(0, LIMITE_RESULTADOS_BUSCA)
+            .map((item) => item.original);
+    }
+
+    if (itensOrdenados.length === 0) {
+        div.innerHTML = "<p class='resultado-aviso'>Nao encontrei resultados parecidos com o que foi digitado. Tente informar artista e musica.</p>";
+        return;
+    }
 
     let alternativos = itensOrdenados.map((m) => m.id.videoId);
     localStorage.setItem("musicasAlternativas", JSON.stringify(alternativos));
@@ -1584,15 +1660,19 @@ function gerarSincronizacaoAproximada(lyrics) {
 
     const duracao = obterDuracaoAtualMusica() || 150;
     const inicio = Math.min(4, Math.max(0, duracao * 0.03));
-    const janelaUtil = Math.max(duracao - inicio - 3, linhas.length * 1.8);
-    const intervalo = Math.max(1.8, janelaUtil / Math.max(linhas.length, 1));
+    const fim = Math.max(inicio + 1, duracao - 1.25);
+    const janelaUtil = Math.max(fim - inicio, 1);
+    const intervalo = janelaUtil / Math.max(linhas.length, 1);
 
     linhas.forEach((texto, indice) => {
-        const tempo = inicio + (indice * intervalo);
+        const tempo = Math.min(inicio + (indice * intervalo), fim);
+        const tempoFinal = indice === linhas.length - 1
+            ? fim
+            : Math.min(inicio + ((indice + 1) * intervalo), fim);
         linhasSincronizadas.push({
             tempo,
             texto,
-            tempoFinal: tempo + intervalo
+            tempoFinal: Math.max(tempoFinal, tempo + 0.35)
         });
     });
 
