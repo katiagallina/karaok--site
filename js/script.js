@@ -1,6 +1,6 @@
 // Substitua o texto abaixo pela sua nova Chave de API gerada no Google Cloud Console
 const YOUTUBE_API_KEY = "AIzaSyBhpdlWVIHHVDOg9rRBWMc5uyAAcEoqazA";
-const SUPABASE_URL = "https://ybantvgcrelqwvyjvksj.supabase.co";
+const SUPABASE_URL = "https://ybantvgcrelqwyvjkvsj.supabase.co";
 const SUPABASE_KEY = "sb_publishable_YOnl_Qc5PQ5o9229nVx8Yg_ArNvGUHS";
 const SUPABASE_TABLE = "ranking";
 const SUPABASE_LYRICS_TABLE = "lyrics_cache";
@@ -697,6 +697,17 @@ function pareceNomeDeCanal(texto) {
     return false;
 }
 
+function partePareceExtraDeVideo(texto) {
+    const valor = normalizarComparacao(texto || "");
+    if (!valor) return false;
+    if (pareceNomeDeCanal(valor)) return true;
+    if (/\b(karaoke|videoke|playback|instrumental|cover|live|ao vivo|oficial|official|video|audio|lyrics|letra|status|shorts|tiktok|demo|demonstracao)\b/.test(valor)) {
+        return true;
+    }
+    if (valor.split(" ").length <= 3 && /\d/.test(valor)) return true;
+    return false;
+}
+
 function extrairMetadadosMusica(tituloVideo, canalYoutube = "") {
     const tituloBruto = decodificarHtml(tituloVideo || "");
     const canalBruto = decodificarHtml(canalYoutube || "");
@@ -712,7 +723,9 @@ function extrairMetadadosMusica(tituloVideo, canalYoutube = "") {
 
     if (partes.length >= 2) {
         const primeiraParte = limparSegmentoMusical(partes[0]);
-        const restoTitulo = limparSegmentoMusical(partes.slice(1).join(" - "));
+        const extras = partes.slice(2);
+        const ignorarExtras = extras.length > 0 && extras.every((parte) => partePareceExtraDeVideo(parte));
+        const restoTitulo = limparSegmentoMusical(ignorarExtras ? partes[1] : partes.slice(1).join(" - "));
 
         if (pareceNomeDeCanal(primeiraParte) && restoTitulo) {
             artistaProvavel = "";
@@ -1223,6 +1236,14 @@ function limparSegmentoMusical(segmento) {
         .trim();
 }
 
+function limparSegmentoMusical(segmento) {
+    return normalizarTextoBusca(segmento || "")
+        .replace(/\b(part|part\.|feat|feat\.|ft|ft\.|participacao|participaÃ§Ã£o|participacoes|participaÃ§Ãµes|com|letra)\b.*$/i, " ")
+        .replace(/\b(ritmo|versao|versÃ£o|video|vÃ­deo|videoke|oficial|natanzinho|seresta|demo|demonstracao|demonstraÃ§Ã£o|sample|trecho|playback|karaoke|lyrics?)\b.*$/i, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+}
+
 function calcularScoreCompatibilidadeLetra(track, tentativas) {
     const tituloTrack = normalizarComparacao(track?.trackName || track?.name || "");
     const artistaTrack = normalizarComparacao(track?.artistName || track?.artist || "");
@@ -1324,7 +1345,7 @@ function analisarCompatibilidadeLetra(track, tentativas) {
 
     const precisaValidarArtista = tentativas.some((tentativa) => (tentativa.artist || "").trim().length > 0);
     const tituloAceito = melhor.tituloScore >= 70 && tituloCompativelComBusca(track?.trackName || track?.name || "", tentativas);
-    const aceito = tituloAceito && (!precisaValidarArtista || melhor.artistaScore >= 65);
+    const aceito = tituloAceito && (!precisaValidarArtista || melhor.artistaScore >= 65 || melhor.tituloScore >= 92);
 
     return {
         ...melhor,
@@ -1369,6 +1390,7 @@ async function buscarNaLrclib(tentativas) {
     return new Promise((resolve) => {
         let pendentes = promessas.length;
         let melhorResultadoSemSync = null;
+        let melhorResultadoRelaxado = null;
         let resolvido = false;
 
         if (pendentes === 0) {
@@ -1382,6 +1404,25 @@ async function buscarNaLrclib(tentativas) {
 
                 pendentes--;
                 if (data && Array.isArray(data) && data.length > 0) {
+                    const candidatosPontuados = data
+                        .map((track) => ({
+                            track,
+                            score: calcularScoreCompatibilidadeLetra(track, tentativasAtivas),
+                            compatibilidade: analisarCompatibilidadeLetra(track, tentativasAtivas)
+                        }))
+                        .sort((a, b) => {
+                            if (!!b.track.syncedLyrics !== !!a.track.syncedLyrics) {
+                                return Number(!!b.track.syncedLyrics) - Number(!!a.track.syncedLyrics);
+                            }
+                            if (b.compatibilidade.tituloScore !== a.compatibilidade.tituloScore) {
+                                return b.compatibilidade.tituloScore - a.compatibilidade.tituloScore;
+                            }
+                            if (b.compatibilidade.total !== a.compatibilidade.total) {
+                                return b.compatibilidade.total - a.compatibilidade.total;
+                            }
+                            return b.score - a.score;
+                        });
+
                     const candidatosValidos = data
                         .map((track) => ({
                             track,
@@ -1406,11 +1447,15 @@ async function buscarNaLrclib(tentativas) {
                     } else if (!melhorResultadoSemSync && candidatosValidos[0]) {
                         melhorResultadoSemSync = candidatosValidos[0].track;
                     }
+
+                    if (!melhorResultadoRelaxado && candidatosPontuados[0]?.compatibilidade?.tituloScore >= 92) {
+                        melhorResultadoRelaxado = candidatosPontuados[0].track;
+                    }
                 }
 
                 if (pendentes === 0 && !resolvido) {
                     resolvido = true;
-                    resolve(melhorResultadoSemSync);
+                    resolve(melhorResultadoSemSync || melhorResultadoRelaxado);
                 }
             });
         });
