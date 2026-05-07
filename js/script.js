@@ -21,6 +21,7 @@ let linhasSincronizadas = [];
 let cantando = false;
 let ultimaLinhaAtiva = -1;
 let ultimoScrollLetraTs = 0;
+let finalizacaoEmAndamento = false;
 
 const yt = localStorage.getItem("musicaAudio");
 const pagina = window.location.pathname;
@@ -508,6 +509,12 @@ function criarPlayer() {
                     loading.innerText = "Tudo pronto! Clique em Comecar a Cantar.";
                 }
             },
+            onStateChange: (event) => {
+                if (event.data === YT.PlayerState.ENDED) {
+                    atualizarStatusSincronia("A musica terminou. Calculando seu resultado...");
+                    finalizar(true);
+                }
+            },
             onError: (e) => {
                 console.error("Erro no player do YouTube:", e.data);
 
@@ -554,6 +561,7 @@ function cantar() {
 
     ytPlayer.playVideo();
     cantando = true;
+    finalizacaoEmAndamento = false;
 
     document.getElementById("btnPlay").style.display = "none";
     document.getElementById("btnPausar").style.display = "inline-block";
@@ -583,8 +591,12 @@ function pausarResumir() {
     }
 }
 
-function finalizar() {
-    if (ytPlayer && typeof ytPlayer.stopVideo === "function") {
+function finalizar(automatico = false) {
+    if (finalizacaoEmAndamento) return;
+    finalizacaoEmAndamento = true;
+    cantando = false;
+
+    if (!automatico && ytPlayer && typeof ytPlayer.stopVideo === "function") {
         ytPlayer.stopVideo();
     }
 
