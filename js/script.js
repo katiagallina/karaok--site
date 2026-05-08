@@ -1091,7 +1091,7 @@ function iniciarSyncLetra() {
             atualizarStatusSincronia("Letra sem tempo exato. A rolagem esta automatica.");
             divLetra.scrollTop += 0.5;
         }
-    }, 60);
+            }, 35);
 }
 
 // ============================================================
