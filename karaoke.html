@@ -13,42 +13,48 @@
 <div id="youtubePlayer"></div>
 
 <div class="container">
-    <h1>&#127908; KARAOKE</h1>
-    <h2 id="nomeMusica" class="karaoke-song-title">Carregando...</h2>
-    <p id="nomeUsuario" class="karaoke-user"></p>
+    <div class="karaoke-screen">
+        <header class="karaoke-header">
+            <h1>&#127908; KARAOKE</h1>
+            <h2 id="nomeMusica" class="karaoke-song-title">Carregando...</h2>
+            <p id="nomeUsuario" class="karaoke-user"></p>
+            <p id="loadingMusica" class="karaoke-loading">&#127925; Carregando audio...</p>
+        </header>
 
-    <p id="loadingMusica" class="karaoke-loading">&#127925; Carregando audio...</p>
-    <div id="statusSincronia" class="status-sincronia" aria-hidden="true">Preparando sincronizacao da letra...</div>
+        <div id="statusSincronia" class="status-sincronia" aria-hidden="true">Preparando sincronizacao da letra...</div>
 
-    <!-- Mini player de audio customizado -->
-    <div class="audio-player">
-        <div class="audio-progress-wrap" id="progressWrap">
-            <div class="audio-progress" id="audioProgress"></div>
+        <div class="audio-player">
+            <div class="audio-progress-wrap" id="progressWrap">
+                <div class="audio-progress" id="audioProgress"></div>
+            </div>
+            <div class="audio-time">
+                <span id="tempoAtual">0:00</span>
+                <span id="tempoDuracao">0:00</span>
+            </div>
+            <div class="audio-controls">
+                <button id="btnPlay" onclick="cantar()" class="audio-btn-play">
+                    &#9654; COMECAR A CANTAR
+                </button>
+                <button onclick="pausarResumir()" id="btnPausar" class="audio-btn-pause" style="display:none;">
+                    &#9646;&#9646; Pausar
+                </button>
+            </div>
         </div>
-        <div class="audio-time">
-            <span id="tempoAtual">0:00</span>
-            <span id="tempoDuracao">0:00</span>
+
+        <div class="score-wrap">
+            <h2 id="pontuacao">&#11088; 0</h2>
         </div>
-        <div class="audio-controls">
-            <button id="btnPlay" onclick="cantar()" class="audio-btn-play">
-                &#9654; COMECAR A CANTAR
+
+        <div class="karaoke-actions">
+            <button onclick="finalizar()" class="btn btn-finalizar">
+                &#9209; Finalizar
             </button>
-            <button onclick="pausarResumir()" id="btnPausar" class="audio-btn-pause" style="display:none;">
-                &#9646;&#9646; Pausar
-            </button>
+        </div>
+
+        <div class="karaoke-lyrics-card">
+            <div class="letra" id="divLetra"></div>
         </div>
     </div>
-
-    <!-- Pontuacao -->
-    <h2 id="pontuacao">&#11088; 0</h2>
-
-    <!-- Botao finalizar -->
-    <button onclick="finalizar()" class="btn btn-finalizar">
-        &#9209; Finalizar
-    </button>
-
-    <!-- Letra -->
-    <div class="letra" id="divLetra"></div>
 </div>
 
 <script src="js/script.js"></script>

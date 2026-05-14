@@ -185,10 +185,36 @@ function tituloCompativelComBusca(tituloReferencia = "", tentativas = []) {
     });
 }
 
+function artistaCompativelComBusca(artistaReferencia = "", tentativas = []) {
+    const artistaNorm = normalizarComparacao(artistaReferencia);
+    if (!artistaNorm) return false;
+
+    const tentativasComArtista = tentativas
+        .map((tentativa) => normalizarComparacao(tentativa.artist || ""))
+        .filter(Boolean);
+
+    if (tentativasComArtista.length === 0) return true;
+
+    return tentativasComArtista.some((artistaTentativa) => {
+        if (artistaNorm === artistaTentativa) return true;
+        if (artistaNorm.includes(artistaTentativa) || artistaTentativa.includes(artistaNorm)) return true;
+
+        const tokens = artistaTentativa.split(" ").filter((token) => token.length > 2);
+        if (tokens.length === 0) return false;
+
+        const encontrados = tokens.filter((token) => artistaNorm.includes(token)).length;
+        return encontrados === tokens.length || encontrados >= Math.max(1, tokens.length - 1);
+    });
+}
+
 function cacheLetraEhCompativel(cacheHit, tituloLimpo, tentativas) {
     if (!cacheHit) return false;
-    if (!cacheHit.titulo) return true;
-    return tituloCompativelComBusca(cacheHit.titulo, [{ song: tituloLimpo, artist: "" }, ...tentativas]);
+    const tentativasAtivas = [{ song: tituloLimpo, artist: "" }, ...tentativas];
+    const tituloOk = !cacheHit.titulo || tituloCompativelComBusca(cacheHit.titulo, tentativasAtivas);
+    const precisaValidarArtista = tentativas.some((tentativa) => (tentativa.artist || "").trim().length > 0);
+    const artistaOk = !precisaValidarArtista || artistaCompativelComBusca(cacheHit.artista, tentativasAtivas);
+
+    return tituloOk && artistaOk;
 }
 
 async function buscarLetraSupabase(tentativas = []) {
@@ -1584,7 +1610,10 @@ function analisarCompatibilidadeLetra(track, tentativas) {
 
     const precisaValidarArtista = tentativas.some((tentativa) => (tentativa.artist || "").trim().length > 0);
     const tituloAceito = melhor.tituloScore >= 70 && tituloCompativelComBusca(track?.trackName || track?.name || "", tentativas);
-    const aceito = tituloAceito && (!precisaValidarArtista || melhor.artistaScore >= 65 || melhor.tituloScore >= 92);
+    const artistaAceito = !precisaValidarArtista
+        || melhor.artistaScore >= 65
+        || artistaCompativelComBusca(track?.artistName || track?.artist || "", tentativas);
+    const aceito = tituloAceito && artistaAceito;
 
     return {
         ...melhor,

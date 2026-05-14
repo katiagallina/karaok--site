@@ -1056,51 +1056,68 @@ button[onclick="buscarMusica()"] {
 }
 
 .page-karaoke .container {
-    width: min(88vw, 700px);
-    min-height: auto;
-    max-height: 92vh;
-    padding: 22px 18px 20px;
+    width: min(92vw, 760px);
+    min-height: 88vh;
+    max-height: 94vh;
+    padding: 22px 18px;
     justify-content: flex-start;
+    border-color: rgba(0, 229, 255, 0.34);
+    background:
+        radial-gradient(circle at top, rgba(15, 118, 184, 0.12), transparent 38%),
+        rgba(14, 27, 58, 0.84);
+    box-shadow: 0 18px 60px rgba(2, 8, 23, 0.55);
 }
 
 .page-karaoke h1 {
-    font-size: clamp(1.7rem, 2.8vw, 2.2rem);
-    margin-bottom: 6px;
+    font-size: clamp(2rem, 3vw, 2.5rem);
+    margin-bottom: 10px;
 }
 
 .page-karaoke #pontuacao {
-    font-size: 1.9rem;
-    margin: 6px 0 10px;
+    font-size: 2.1rem;
+    margin: 0;
     color: var(--neon-yellow);
-    text-shadow: 0 0 12px var(--neon-yellow);
+    text-shadow: 0 0 12px var(--neon-yellow), 0 0 28px rgba(250, 204, 21, 0.4);
 }
 
 .page-karaoke .audio-player {
-    max-width: 520px;
-    padding: 12px 14px;
-    margin: 10px 0 12px;
+    width: 100%;
+    max-width: 620px;
+    padding: 14px 14px 16px;
+    margin: 6px 0 18px;
+    border-radius: 14px;
+    background: rgba(8, 16, 39, 0.78);
+    border: 1px solid rgba(0, 229, 255, 0.3);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.02);
 }
 
 .page-karaoke .audio-time {
     font-size: 0.72rem;
+    color: rgba(233, 245, 255, 0.72);
+    margin-bottom: 10px;
 }
 
 .page-karaoke .audio-btn-play,
 .page-karaoke .audio-btn-pause {
-    padding: 9px 16px;
+    min-width: 184px;
+    padding: 10px 18px;
     font-size: 0.82rem;
     letter-spacing: 0.04em;
 }
 
 .page-karaoke .letra {
-    max-width: 560px;
-    max-height: 38vh;
-    min-height: 32vh;
-    margin: 10px 0 0;
-    padding: 22px 14px 26px;
+    max-width: 100%;
+    max-height: none;
+    min-height: 300px;
+    margin: 0;
+    padding: 36px 12px 24px;
     font-size: 0.92rem;
     overflow-y: auto;
     overflow-x: hidden;
+    border-radius: 18px;
+    background: transparent;
+    border: none;
+    box-shadow: none;
 }
 
 .page-karaoke .letra p {
@@ -1138,6 +1155,150 @@ button[onclick="buscarMusica()"] {
 
 .page-karaoke .letra-sync-painel .sync-linha-guia {
     font-size: 0.76rem;
+}
+
+.karaoke-screen {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+}
+
+.karaoke-header {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+}
+
+.karaoke-header h1 {
+    letter-spacing: 0.03em;
+}
+
+.karaoke-song-title {
+    width: 100%;
+    max-width: 620px;
+    font-size: 1rem;
+    line-height: 1.35;
+    margin-bottom: 0;
+    color: #ecfeff;
+    text-shadow: 0 0 10px rgba(0, 229, 255, 0.42);
+}
+
+.karaoke-user,
+.karaoke-loading {
+    margin-bottom: 0;
+}
+
+.karaoke-user {
+    font-size: 0.9rem;
+    color: rgba(232, 241, 255, 0.82);
+}
+
+.karaoke-loading {
+    font-size: 0.9rem;
+    color: rgba(214, 228, 255, 0.78);
+    min-height: 1.5em;
+}
+
+.audio-progress-wrap {
+    height: 6px;
+    margin-bottom: 7px;
+    background: rgba(148, 163, 184, 0.2);
+    border-radius: 999px;
+}
+
+.audio-progress {
+    background: linear-gradient(90deg, #38bdf8, #22d3ee);
+    box-shadow: 0 0 10px rgba(34, 211, 238, 0.7);
+}
+
+.audio-controls {
+    justify-content: center;
+}
+
+.audio-btn-play {
+    background: linear-gradient(180deg, #32d875, #16a34a);
+    box-shadow: 0 0 18px rgba(34, 197, 94, 0.65);
+}
+
+.audio-btn-pause {
+    background: linear-gradient(180deg, #3b82f6, #1d4ed8);
+    box-shadow: 0 0 16px rgba(59, 130, 246, 0.45);
+}
+
+.score-wrap {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin: 2px 0 0;
+}
+
+.karaoke-actions {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 2px;
+}
+
+.karaoke-lyrics-card {
+    width: 100%;
+    max-width: 620px;
+    min-height: 268px;
+    padding: 10px;
+    border-radius: 18px;
+    border: 1px solid rgba(0, 229, 255, 0.26);
+    background: rgba(10, 20, 47, 0.4);
+}
+
+.status-sincronia {
+    display: block;
+    width: 100%;
+    max-width: 620px;
+    margin: 0 0 4px;
+    padding: 0;
+    background: transparent;
+    border: none;
+    color: rgba(225, 233, 248, 0.76);
+    font-size: 0.88rem;
+    text-align: center;
+    min-height: 1.4em;
+}
+
+.painel-sync {
+    display: none;
+    justify-content: center;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 8px;
+    color: var(--text-muted);
+    font-size: 0.78rem;
+    flex-wrap: wrap;
+}
+
+.painel-sync-btn {
+    min-width: 54px;
+    background: rgba(15, 23, 42, 0.7);
+    border: 1px solid rgba(255, 255, 255, 0.5);
+    color: var(--text-light);
+    border-radius: 8px;
+    padding: 4px 8px;
+    cursor: pointer;
+    font-size: 0.78rem;
+}
+
+.btn-finalizar {
+    background: transparent;
+    border: 1px solid var(--neon-blue);
+    color: var(--neon-blue);
+    box-shadow: 0 0 14px rgba(0, 229, 255, 0.28);
+    margin-bottom: 0;
+}
+
+.btn-finalizar:hover {
+    background: rgba(0, 229, 255, 0.12);
+    box-shadow: 0 0 20px rgba(0, 229, 255, 0.4);
 }
 
 .page-vs .vs {
@@ -1342,13 +1503,13 @@ button[onclick="buscarMusica()"] {
     .page-karaoke .audio-btn-pause,
     .page-karaoke .btn-finalizar {
         width: 100%;
+        min-width: 0;
     }
 
     .page-karaoke .letra {
         max-width: 100%;
-        max-height: 42vh;
-        min-height: 30vh;
-        padding: 18px 12px 20px;
+        min-height: 250px;
+        padding: 28px 10px 18px;
     }
 
     .page-karaoke .letra-sync-painel .sync-linha-atual {
@@ -1362,5 +1523,20 @@ button[onclick="buscarMusica()"] {
 
     #resultadosBusca .resultado-item {
         font-size: 0.84rem;
+    }
+
+    .page-karaoke .container {
+        min-height: calc(100vh - 24px);
+        max-height: none;
+        padding: 18px 12px;
+    }
+
+    .karaoke-song-title {
+        font-size: 0.9rem;
+    }
+
+    .karaoke-lyrics-card {
+        min-height: 240px;
+        padding: 8px;
     }
 }
