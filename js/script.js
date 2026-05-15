@@ -11,6 +11,8 @@ const RESULTADO_ATUAL_ID_KEY = "resultadoAtualId";
 const RESULTADO_PROCESSADO_KEY = "ultimoResultadoProcessado";
 const RESULTADO_REMOTO_KEY = "ultimoResultadoRemoto";
 const LIMITE_RESULTADOS_BUSCA = 6;
+const DURACAO_MINIMA_VIDEO_SEGUNDOS = 75;
+const DURACAO_MAXIMA_VIDEO_SEGUNDOS = 900;
 
 let ytPlayer = null;
 let playerPronto = false;
@@ -137,6 +139,25 @@ function criarChavesCacheLetra(titulo = "", artista = "", tentativas = []) {
     return Array.from(chaves);
 }
 
+function criarChavesCacheDiretas(videoId = "", buscaOriginal = "") {
+    const chaves = new Set();
+    const videoNorm = String(videoId || "").trim();
+    const buscaNorm = normalizarComparacao(buscaOriginal || "");
+
+    if (videoNorm) chaves.add(`video__${videoNorm}`);
+    if (buscaNorm) chaves.add(`busca__${buscaNorm}`);
+
+    return Array.from(chaves);
+}
+
+function combinarChavesCache(...listas) {
+    return Array.from(
+        new Set(
+            listas.flat().filter(Boolean)
+        )
+    );
+}
+
 function buscarLetraNoCache(chaves = []) {
     const cache = getLyricsCache();
     for (const chave of chaves) {
@@ -217,15 +238,26 @@ function cacheLetraEhCompativel(cacheHit, tituloLimpo, tentativas) {
     return tituloOk && artistaOk;
 }
 
-async function buscarLetraSupabase(tentativas = []) {
-    const chaves = criarChavesCacheLetra("", "", tentativas);
+async function buscarLetraSupabase(tentativas = [], chavesExtras = []) {
+    const chaves = combinarChavesCache(
+        chavesExtras,
+        criarChavesCacheLetra("", "", tentativas)
+    );
     if (chaves.length === 0) return null;
 
     const filtros = chaves.map((chave) => `cache_key.eq.${encodeURIComponent(chave)}`).join(",");
     const query = `select=cache_key,titulo,artista,plain_lyrics,synced_lyrics,source,updated_at&or=(${filtros})&order=updated_at.desc&limit=1`;
-    const resposta = await fetch(montarUrlSupabase(SUPABASE_LYRICS_TABLE, query), {
-        headers: obterHeadersSupabase()
-    });
+    const resposta = await fetchComTimeout(
+        montarUrlSupabase(SUPABASE_LYRICS_TABLE, query),
+        2500,
+        {
+            headers: obterHeadersSupabase()
+        }
+    );
+
+    if (!resposta) {
+        throw new Error("[Supabase:lyrics_select] Timeout ao consultar cache remoto de letras");
+    }
 
     if (!resposta.ok) {
         const erroTexto = await resposta.text();
@@ -405,7 +437,7 @@ function renderizarRanking(lista, origem = "local") {
     ul.innerHTML = lista.map((item, index) => {
         const nome = escaparHtml(item.nome || "Cantor(a)");
         const musica = item.musica ? `<br><small>${escaparHtml(item.musica)}</small>` : "";
-        const selo = index === 0 && origem === "supabase" ? " 🌟" : "";
+        const selo = index === 0 && origem === "supabase" ? " *" : "";
         return `<li><strong>${index + 1}. ${nome}</strong> - ${item.pontuacao || 0} pts${selo}${musica}</li>`;
     }).join("");
 }
@@ -578,7 +610,7 @@ if (pagina.includes("karaoke.html")) {
 
         if (btnCantar && modo === "desafio") {
             btnCantar.href = "desafio.html";
-            btnCantar.innerHTML = "🔄 Novo duelo";
+            btnCantar.innerHTML = "Novo duelo";
         }
     });
 }
@@ -897,32 +929,6 @@ function extrairMetadadosMusica(tituloVideo, canalYoutube = "") {
     };
 }
 
-function limparSegmentoMusical(segmento) {
-    return normalizarTextoBusca(segmento || "")
-        .replace(/\b(part|part\.|feat|feat\.|ft|ft\.|participacao|participação|com|letra)\b.*$/i, " ")
-        .replace(/\b(ritmo|versao|versão|video|vídeo|oficial)\b.*$/i, " ")
-        .replace(/\s+/g, " ")
-        .trim();
-}
-
-function extrairMetadadosBusca(textoBusca) {
-    const buscaLimpa = limparSegmentoMusical(textoBusca || "");
-    const partes = buscaLimpa.split(/\s+-\s+/).map((parte) => parte.trim()).filter(Boolean);
-
-    if (partes.length >= 2) {
-        return {
-            buscaLimpa,
-            artista: limparSegmentoMusical(partes[0]),
-            musica: limparSegmentoMusical(partes.slice(1).join(" - "))
-        };
-    }
-
-    return {
-        buscaLimpa,
-        artista: "",
-        musica: buscaLimpa
-    };
-}
 
 function extrairTokensRelevantesBusca(termoBusca = "") {
     const metaBusca = extrairMetadadosBusca(termoBusca);
@@ -966,12 +972,58 @@ function resultadoCombinaComBusca(meta, termoBusca = "") {
     return encontrados >= minimo;
 }
 
+function converterDuracaoIso8601ParaSegundos(iso = "") {
+    const match = String(iso || "").match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/i);
+    if (!match) return 0;
+
+    const horas = Number(match[1] || 0);
+    const minutos = Number(match[2] || 0);
+    const segundos = Number(match[3] || 0);
+    return (horas * 3600) + (minutos * 60) + segundos;
+}
+
+function videoTemDuracaoAceitavel(item) {
+    const duracao = Number(item?.contentDetails?.durationSec || 0);
+    if (!duracao) return true;
+    return duracao >= DURACAO_MINIMA_VIDEO_SEGUNDOS && duracao <= DURACAO_MAXIMA_VIDEO_SEGUNDOS;
+}
+
+async function enriquecerResultadosYoutube(items = []) {
+    const ids = items
+        .map((item) => item?.id?.videoId)
+        .filter(Boolean);
+
+    if (ids.length === 0) return items;
+
+    const url = `https://www.googleapis.com/youtube/v3/videos?part=contentDetails&id=${ids.join(",")}&key=${YOUTUBE_API_KEY}`;
+
+    try {
+        const res = await fetch(url);
+        const data = await res.json();
+        const porId = new Map(
+            (data.items || []).map((item) => {
+                const duracaoSec = converterDuracaoIso8601ParaSegundos(item?.contentDetails?.duration || "");
+                return [item.id, { ...(item.contentDetails || {}), durationSec: duracaoSec }];
+            })
+        );
+
+        return items.map((item) => ({
+            ...item,
+            contentDetails: porId.get(item?.id?.videoId) || item.contentDetails || null
+        }));
+    } catch (erro) {
+        console.error("Erro ao carregar detalhes dos videos:", erro);
+        return items;
+    }
+}
+
 function pontuarResultadoMusica(item, termoBusca) {
     const meta = extrairMetadadosMusica(item?.snippet?.title || "", item?.snippet?.channelTitle || "");
     const tituloNorm = normalizarComparacao(meta.tituloExibicao || meta.tituloBruto);
     const termoNorm = normalizarComparacao(termoBusca);
     const tokensBusca = extrairTokensRelevantesBusca(termoBusca);
     const tokens = termoNorm.split(" ").filter((token) => token.length > 1);
+    const duracao = Number(item?.contentDetails?.durationSec || 0);
     let score = 0;
 
     if (termoNorm && tituloNorm.includes(termoNorm)) score += 40;
@@ -995,6 +1047,14 @@ function pontuarResultadoMusica(item, termoBusca) {
     if (/\b(karaoke|playback|instrumental)\b/i.test(meta.canalBruto)) score += 10;
     if (meta.artistaProvavel && meta.musicaProvavel) score += 8;
     if (/\b(cover|live|ao vivo|dvd|show|clipe|studio sessions)\b/i.test(meta.tituloBruto)) score -= 20;
+
+    if (duracao > 0) {
+        if (duracao < DURACAO_MINIMA_VIDEO_SEGUNDOS) score -= 80;
+        else if (duracao > DURACAO_MAXIMA_VIDEO_SEGUNDOS) score -= 25;
+        else score += 18;
+
+        if (duracao >= 120 && duracao <= 420) score += 8;
+    }
 
     return { score, meta };
 }
@@ -1069,6 +1129,7 @@ function montarHtmlLinhaSync(linha, tempoAtual) {
 }
 
 // ============================================================
+// ============================================================
 // SINCRONIZACAO DA LETRA
 // ============================================================
 function iniciarSyncLetra() {
@@ -1094,35 +1155,26 @@ function iniciarSyncLetra() {
 
             if (ativa < 0) {
                 renderizarPainelLetraSync(-1, 0, tempo);
-                const primeiraLinha = linhasSincronizadas[0];
                 atualizarStatusSincronia("Letra sincronizada pronta.");
                 return;
             }
 
             const linhaAtual = linhasSincronizadas[ativa];
             const proximaLinha = linhasSincronizadas[ativa + 1] || null;
-            
-            // Evita lentidão no destaque estimando o tempo real de canto pelo número de letras
             const tempoAteProxima = proximaLinha ? Math.max(proximaLinha.tempo - linhaAtual.tempo, 0.35) : 3.0;
             const duracaoEstimada = Math.max(1.5, (linhaAtual.texto || "").length * 0.08);
             const duracaoParaPreenchimento = Math.min(tempoAteProxima, duracaoEstimada);
-            
             const progresso = Math.max(0, Math.min(((tempo - linhaAtual.tempo) / duracaoParaPreenchimento) * 100, 100));
+
             renderizarPainelLetraSync(ativa, progresso, tempo);
-
             ultimaLinhaAtiva = ativa;
-
             atualizarStatusSincronia("Acompanhe a letra destacada abaixo.");
         } else if (divLetra.scrollTop < divLetra.scrollHeight - divLetra.offsetHeight) {
             atualizarStatusSincronia("Letra sem tempo exato. A rolagem esta automatica.");
             divLetra.scrollTop += 0.5;
         }
-            }, 35);
+    }, 35);
 }
-
-// ============================================================
-// BUSCAR MUSICA
-// ============================================================
 async function buscarMusica() {
     let termo = document.getElementById("buscaMusica").value.trim();
     let div = document.getElementById("resultadosBusca");
@@ -1150,7 +1202,8 @@ async function buscarMusica() {
         if (data.error || !data.items || data.items.length === 0) {
             mostrarResultadosFallback(div, termo);
         } else {
-            renderizarListaMusicas(data.items, div);
+            const itensComDetalhes = await enriquecerResultadosYoutube(data.items);
+            renderizarListaMusicas(itensComDetalhes, div);
         }
     } catch (erro) {
         console.error("Erro na busca:", erro);
@@ -1166,13 +1219,16 @@ function renderizarListaMusicas(items, div) {
         .map((m) => ({ original: m, ...pontuarResultadoMusica(m, termoBusca) }))
         .sort((a, b) => b.score - a.score);
 
-    let itensOrdenados = candidatosPontuados
+    const candidatosComDuracaoBoa = candidatosPontuados.filter((item) => videoTemDuracaoAceitavel(item.original));
+    const baseOrdenada = candidatosComDuracaoBoa.length > 0 ? candidatosComDuracaoBoa : candidatosPontuados;
+
+    let itensOrdenados = baseOrdenada
         .filter((item) => resultadoCombinaComBusca(item.meta, termoBusca))
         .slice(0, LIMITE_RESULTADOS_BUSCA)
         .map((item) => item.original);
 
     if (itensOrdenados.length === 0) {
-        itensOrdenados = candidatosPontuados
+        itensOrdenados = baseOrdenada
             .filter((item) => item.score >= 35)
             .slice(0, LIMITE_RESULTADOS_BUSCA)
             .map((item) => item.original);
@@ -1287,7 +1343,7 @@ function irParaMusica() {
 function irParaVS() {
     let musica = localStorage.getItem("musicaAudio");
     if (!musica) {
-        alert("Por favor, pesquise e selecione uma música primeiro!");
+        alert("Por favor, pesquise e selecione uma musica primeiro!");
         return;
     }
     localStorage.setItem("turnoAtual", "1");
@@ -1335,151 +1391,17 @@ function inicializarPaginaVS() {
     if (turno === "1") {
         infoTurno.innerText = `${j1} canta primeiro!`;
         subTextoTurno.innerText = "Preparem-se para o duelo.";
-        if (btnCantar) btnCantar.innerText = `🎤 Começar vez de ${j1}`;
+        if (btnCantar) btnCantar.innerText = `Comecar vez de ${j1}`;
     } else {
         let pts1 = localStorage.getItem("pontuacaoJ1") || "0";
-        infoTurno.innerText = `Agora é a vez de ${j2}!`;
-        subTextoTurno.innerHTML = `A pontuação de ${j1} foi: <strong>${pts1} pts</strong>`;
-        if (btnCantar) btnCantar.innerText = `🎤 Começar vez de ${j2}`;
+        infoTurno.innerText = `Agora e a vez de ${j2}!`;
+        subTextoTurno.innerHTML = `A pontuacao de ${j1} foi: <strong>${pts1} pts</strong>`;
+        if (btnCantar) btnCantar.innerText = `Comecar vez de ${j2}`;
     }
 }
 
 // Variavel para atraso manual da letra
 let offsetLetra = 0;
-
-function normalizarTextoBusca(texto) {
-    return (texto || "")
-        .replace(/\(.*?\)|\[.*?\]/g, " ")
-        .replace(/karaok[eê]|instrumental|version|vers[aã]o|cover|playback|com letra|lyrics?|audio oficial|video oficial|official video|official audio/gi, " ")
-        .replace(/\|/g, " ")
-        .replace(/\s+e\s+/gi, " & ")
-        .replace(/[^a-zA-Z0-9À-ÿ\s\-&']/g, " ")
-        .replace(/\s+/g, " ")
-        .replace(/-\s*-/g, "-")
-        .trim();
-}
-
-function gerarTentativasBuscaLetra(canalYoutube, tituloVideo) {
-    const tituloLimpo = normalizarTextoBusca(tituloVideo);
-    const canalLimpo = normalizarTextoBusca(canalYoutube);
-    const tentativas = [];
-    const vistos = new Set();
-
-    function adicionar(song, artist) {
-        const musica = (song || "").trim();
-        const artista = (artist || "").trim();
-        const chave = `${musica.toLowerCase()}|${artista.toLowerCase()}`;
-
-        if (!musica || vistos.has(chave)) return;
-        vistos.add(chave);
-
-        tentativas.push({
-            song: musica,
-            artist: artista,
-            query: artista ? `${artista} ${musica}` : musica
-        });
-    }
-
-    const partes = tituloLimpo.split("-").map((p) => p.trim()).filter(Boolean);
-
-    adicionar(tituloLimpo, canalLimpo);
-
-    if (partes.length >= 2) {
-        const primeira = partes[0];
-        const resto = partes.slice(1).join(" - ");
-        adicionar(primeira, resto);
-        adicionar(resto, primeira);
-        adicionar(primeira, "");
-        adicionar(resto, "");
-    }
-
-    if (partes.length >= 3) {
-        adicionar(partes[0], partes[1]);
-        adicionar(partes[1], partes[0]);
-    }
-
-    if (canalLimpo) {
-        adicionar(tituloLimpo, canalLimpo);
-    }
-
-    return { tituloLimpo, tentativas };
-}
-
-function normalizarTextoBusca(texto) {
-    return decodificarHtml(texto || "")
-        .replace(/\(.*?\)|\[.*?\]/g, " ")
-        .replace(/\s+\|\s+[^|]+$/g, " ")
-        .replace(/karaok[eê]|instrumental|version|vers[aã]o|cover|playback|com letra|lyrics?|audio oficial|video oficial|official video|official audio|studio sessions|ao vivo|live/gi, " ")
-        .replace(/\|/g, " ")
-        .replace(/\s+e\s+/gi, " & ")
-        .replace(/[^a-zA-Z0-9À-ÿ\s\-&']/g, " ")
-        .replace(/\s+/g, " ")
-        .replace(/-\s*-/g, "-")
-        .trim();
-}
-
-function gerarTentativasBuscaLetra(canalYoutube, tituloVideo) {
-    const meta = extrairMetadadosMusica(tituloVideo, canalYoutube);
-    const tituloLimpo = meta.tituloExibicao || meta.tituloLimpo;
-    const canalLimpo = meta.canalLimpo;
-    const buscaOriginal = localStorage.getItem("musicaBuscaOriginal") || "";
-    const metaBusca = extrairMetadadosBusca(buscaOriginal);
-    const tentativas = [];
-    const vistos = new Set();
-
-    function adicionar(song, artist) {
-        const musica = (song || "").trim();
-        const artista = (artist || "").trim();
-        const chave = `${musica.toLowerCase()}|${artista.toLowerCase()}`;
-
-        if (!musica || vistos.has(chave)) return;
-        vistos.add(chave);
-
-        tentativas.push({
-            song: musica,
-            artist: artista,
-            query: artista ? `${artista} ${musica}` : musica
-        });
-    }
-
-    const partes = tituloLimpo.split("-").map((p) => p.trim()).filter(Boolean);
-
-    adicionar(metaBusca.musica, metaBusca.artista);
-    adicionar(metaBusca.buscaLimpa, "");
-    adicionar(meta.musicaProvavel, meta.artistaProvavel);
-    adicionar(meta.musicaProvavel, canalLimpo);
-    adicionar(tituloLimpo, meta.artistaProvavel);
-    adicionar(tituloLimpo, "");
-
-    if (partes.length >= 2) {
-        const primeira = partes[0];
-        const resto = partes.slice(1).join(" - ");
-        adicionar(resto, primeira);
-        adicionar(resto, "");
-        adicionar(primeira, resto);
-        adicionar(primeira, "");
-    }
-
-    if (partes.length >= 3) {
-        adicionar(partes[1], partes[0]);
-        adicionar(partes[0], partes[1]);
-    }
-
-    if (canalLimpo) {
-        adicionar(meta.musicaProvavel || tituloLimpo, canalLimpo);
-    }
-
-    return { tituloLimpo, tentativas };
-}
-
-function limparSegmentoMusical(segmento) {
-    return normalizarTextoBusca(segmento || "")
-        .replace(/\b(part|part\.|feat|feat\.|ft|ft\.|participacao|participação|participacoes|participações|com|letra)\b.*$/i, " ")
-        .replace(/\b(ritmo|versao|versão|video|vídeo|oficial|natanzinho|seresta)\b.*$/i, " ")
-        .replace(/\s+/g, " ")
-        .trim();
-}
-
 function normalizarTextoBusca(texto) {
     return decodificarHtml(removerPrefixoCanalProvavel(texto || ""))
         .replace(/\(.*?\)|\[.*?\]/g, " ")
@@ -1496,17 +1418,110 @@ function normalizarTextoBusca(texto) {
 function limparSegmentoMusical(segmento) {
     return normalizarTextoBusca(segmento || "")
         .replace(/\b(part|part\.|feat|feat\.|ft|ft\.|participacao|participação|participacoes|participações|com|letra)\b.*$/i, " ")
-        .replace(/\b(ritmo|versao|versão|video|vídeo|oficial|natanzinho|seresta|demo|demonstracao|demonstração|sample|trecho)\b.*$/i, " ")
+        .replace(/\b(ritmo|versao|versão|video|vídeo|videoke|oficial|natanzinho|seresta|demo|demonstracao|demonstração|sample|trecho|playback|karaoke|lyrics?)\b.*$/i, " ")
         .replace(/\s+/g, " ")
         .trim();
 }
 
-function limparSegmentoMusical(segmento) {
-    return normalizarTextoBusca(segmento || "")
-        .replace(/\b(part|part\.|feat|feat\.|ft|ft\.|participacao|participaÃ§Ã£o|participacoes|participaÃ§Ãµes|com|letra)\b.*$/i, " ")
-        .replace(/\b(ritmo|versao|versÃ£o|video|vÃ­deo|videoke|oficial|natanzinho|seresta|demo|demonstracao|demonstraÃ§Ã£o|sample|trecho|playback|karaoke|lyrics?)\b.*$/i, " ")
-        .replace(/\s+/g, " ")
-        .trim();
+function escaparRegex(texto) {
+    return String(texto || "").replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function removerSufixoDuplicadoDaMusica(musica, artista = "") {
+    const musicaLimpa = limparSegmentoMusical(musica || "");
+    const artistaLimpo = limparSegmentoMusical(artista || "");
+
+    if (!musicaLimpa || !artistaLimpo) return musicaLimpa;
+
+    const musicaNorm = normalizarComparacao(musicaLimpa);
+    const artistaNorm = normalizarComparacao(artistaLimpo);
+
+    if (!musicaNorm || !artistaNorm || musicaNorm === artistaNorm) return musicaLimpa;
+
+    const padraoFinal = new RegExp("(?:\\s+-\\s+|\\s+)" + escaparRegex(artistaNorm) + "$", "i");
+    if (!padraoFinal.test(musicaNorm)) return musicaLimpa;
+
+    const palavrasArtista = artistaLimpo.split(/\s+/).filter(Boolean);
+    const palavrasMusica = musicaLimpa.split(/\s+/);
+    if (palavrasMusica.length <= palavrasArtista.length) return musicaLimpa;
+
+    return palavrasMusica.slice(0, palavrasMusica.length - palavrasArtista.length).join(" ").trim() || musicaLimpa;
+}
+
+function extrairMetadadosBusca(textoBusca) {
+    const buscaLimpa = limparSegmentoMusical(textoBusca || "");
+    const partes = buscaLimpa.split(/\s+-\s+/).map((parte) => parte.trim()).filter(Boolean);
+
+    if (partes.length >= 2) {
+        return {
+            buscaLimpa,
+            artista: limparSegmentoMusical(partes[0]),
+            musica: limparSegmentoMusical(partes.slice(1).join(" - "))
+        };
+    }
+
+    return {
+        buscaLimpa,
+        artista: "",
+        musica: buscaLimpa
+    };
+}
+
+function gerarTentativasBuscaLetra(canalYoutube, tituloVideo) {
+    const meta = extrairMetadadosMusica(tituloVideo, canalYoutube);
+    const tituloLimpo = meta.tituloExibicao || meta.tituloLimpo;
+    const canalLimpo = meta.canalLimpo;
+    const buscaOriginal = localStorage.getItem("musicaBuscaOriginal") || "";
+    const metaBusca = extrairMetadadosBusca(buscaOriginal);
+    const musicaProvavel = removerSufixoDuplicadoDaMusica(meta.musicaProvavel, meta.artistaProvavel || canalLimpo);
+    const musicaBusca = removerSufixoDuplicadoDaMusica(metaBusca.musica, metaBusca.artista);
+    const tentativas = [];
+    const vistos = new Set();
+
+    function adicionar(song, artist) {
+        const musica = limparSegmentoMusical(song || "");
+        const artista = limparSegmentoMusical(artist || "");
+        const chave = `${musica.toLowerCase()}|${artista.toLowerCase()}`;
+
+        if (!musica || vistos.has(chave)) return;
+        vistos.add(chave);
+
+        tentativas.push({
+            song: musica,
+            artist: artista,
+            query: artista ? `${artista} ${musica}` : musica
+        });
+    }
+
+    const partes = tituloLimpo.split("-").map((p) => p.trim()).filter(Boolean);
+
+    adicionar(musicaBusca, metaBusca.artista);
+    adicionar(metaBusca.buscaLimpa, "");
+    adicionar(musicaProvavel, meta.artistaProvavel);
+    adicionar(musicaProvavel, canalLimpo);
+    adicionar(musicaProvavel, "");
+    adicionar(tituloLimpo, meta.artistaProvavel);
+    adicionar(tituloLimpo, "");
+
+    if (partes.length >= 2) {
+        const primeira = limparSegmentoMusical(partes[0]);
+        const resto = removerSufixoDuplicadoDaMusica(partes.slice(1).join(" - "), primeira || meta.artistaProvavel);
+        adicionar(resto, primeira);
+        adicionar(resto, "");
+        adicionar(primeira, resto);
+        adicionar(primeira, "");
+    }
+
+    if (partes.length >= 3) {
+        adicionar(partes[1], partes[0]);
+        adicionar(partes[0], partes[1]);
+    }
+
+    if (canalLimpo) {
+        adicionar(musicaProvavel || tituloLimpo, canalLimpo);
+    }
+
+    return { tituloLimpo, tentativas };
 }
 
 function calcularScoreCompatibilidadeLetra(track, tentativas) {
@@ -1621,11 +1636,11 @@ function analisarCompatibilidadeLetra(track, tentativas) {
     };
 }
 
-async function fetchComTimeout(url, timeoutMs = 5000) {
+async function fetchComTimeout(url, timeoutMs = 5000, options = {}) {
     try {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-        const res = await fetch(url, { signal: controller.signal });
+        const res = await fetch(url, { ...options, signal: controller.signal });
         clearTimeout(timeoutId);
         return res;
     } catch (e) {
@@ -1644,33 +1659,21 @@ async function fetchLrclib(url) {
 }
 
 async function buscarNaLrclib(tentativas) {
-    // Processamos apenas as 4 primeiras combinações em paralelo para não sobrecarregar a API
     const tentativasAtivas = tentativas.slice(0, 6);
-    let promessas = [];
+    let melhorResultadoSemSync = null;
+    let melhorResultadoRelaxado = null;
 
-    tentativasAtivas.forEach(tentativa => {
+    for (const tentativa of tentativasAtivas) {
+        let urls = [];
         if (tentativa.artist) {
-            promessas.push(fetchLrclib(`https://lrclib.net/api/search?track_name=${encodeURIComponent(tentativa.song)}&artist_name=${encodeURIComponent(tentativa.artist)}`));
+            urls.push(`https://lrclib.net/api/search?track_name=${encodeURIComponent(tentativa.song)}&artist_name=${encodeURIComponent(tentativa.artist)}`);
         }
-        promessas.push(fetchLrclib(`https://lrclib.net/api/search?q=${encodeURIComponent(tentativa.query)}`));
-    });
+        urls.push(`https://lrclib.net/api/search?q=${encodeURIComponent(tentativa.query)}`);
 
-    return new Promise((resolve) => {
-        let pendentes = promessas.length;
-        let melhorResultadoSemSync = null;
-        let melhorResultadoRelaxado = null;
-        let resolvido = false;
-
-        if (pendentes === 0) {
-            resolve(null);
-            return;
-        }
-
-        promessas.forEach(p => {
-            p.then(data => {
-                if (resolvido) return;
-
-                pendentes--;
+        for (const url of urls) {
+            try {
+                const data = await fetchLrclib(url);
+                
                 if (data && Array.isArray(data) && data.length > 0) {
                     const candidatosPontuados = data
                         .map((track) => ({
@@ -1691,27 +1694,12 @@ async function buscarNaLrclib(tentativas) {
                             return b.score - a.score;
                         });
 
-                    const candidatosValidos = data
-                        .map((track) => ({
-                            track,
-                            score: calcularScoreCompatibilidadeLetra(track, tentativasAtivas),
-                            compatibilidade: analisarCompatibilidadeLetra(track, tentativasAtivas)
-                        }))
-                        .filter((item) => item.compatibilidade.aceito)
-                        .sort((a, b) => {
-                            if (!!b.track.syncedLyrics !== !!a.track.syncedLyrics) {
-                                return Number(!!b.track.syncedLyrics) - Number(!!a.track.syncedLyrics);
-                            }
-                            if (b.compatibilidade.total !== a.compatibilidade.total) {
-                                return b.compatibilidade.total - a.compatibilidade.total;
-                            }
-                            return b.score - a.score;
-                        });
+                    const candidatosValidos = candidatosPontuados
+                        .filter((item) => item.compatibilidade.aceito);
 
                     const comSync = candidatosValidos.find((item) => item.track.syncedLyrics);
                     if (comSync) {
-                        resolvido = true;
-                        resolve(comSync.track);
+                        return comSync.track;
                     } else if (!melhorResultadoSemSync && candidatosValidos[0]) {
                         melhorResultadoSemSync = candidatosValidos[0].track;
                     }
@@ -1720,14 +1708,13 @@ async function buscarNaLrclib(tentativas) {
                         melhorResultadoRelaxado = candidatosPontuados[0].track;
                     }
                 }
+            } catch (e) {
+                console.error("Erro interno no processamento do LRCLIB:", e);
+            }
+        }
+    }
 
-                if (pendentes === 0 && !resolvido) {
-                    resolvido = true;
-                    resolve(melhorResultadoSemSync || melhorResultadoRelaxado);
-                }
-            });
-        });
-    });
+    return melhorResultadoSemSync || melhorResultadoRelaxado;
 }
 
 async function fetchLyricsOvh(url) {
@@ -1744,34 +1731,19 @@ async function fetchLyricsOvh(url) {
 async function buscarNaLyricsOvh(tentativas) {
     const tentativasAtivas = tentativas.filter(t => t.artist && t.song).slice(0, 6);
 
-    return new Promise((resolve) => {
-        let pendentes = tentativasAtivas.length;
-        let resolvido = false;
-
-        if (pendentes === 0) {
-            resolve(null);
-            return;
+    for (const tentativa of tentativasAtivas) {
+        try {
+            const url = `https://api.lyrics.ovh/v1/${encodeURIComponent(tentativa.artist)}/${encodeURIComponent(tentativa.song)}`;
+            const lyrics = await fetchLyricsOvh(url);
+            if (lyrics) {
+                return lyrics;
+            }
+        } catch (e) {
+            console.error("Erro interno no processamento do LyricsOvh:", e);
         }
+    }
 
-        tentativasAtivas.forEach(tentativa => {
-            fetchLyricsOvh(`https://api.lyrics.ovh/v1/${encodeURIComponent(tentativa.artist)}/${encodeURIComponent(tentativa.song)}`)
-                .then(lyrics => {
-                    if (resolvido) return;
-                    
-                    pendentes--;
-
-                    if (lyrics) {
-                        resolvido = true;
-                        resolve(lyrics);
-                    }
-
-                    if (pendentes === 0 && !resolvido) {
-                        resolvido = true;
-                        resolve(null);
-                    }
-                });
-        });
-    });
+    return null;
 }
 
 function extrairLinhasLimpas(lyrics) {
@@ -1805,7 +1777,7 @@ function carregarLinhasSincronizadasDoLrc(lrc) {
         const m = parseInt(match[1], 10);
         const s = parseFloat(match[2]);
         const tempo = (m * 60) + s;
-        let texto = match[3].trim() || "♪";
+        let texto = match[3].trim() || "...";
 
         texto = texto.replace(/<\d{2}:\d{2}(?:\.\d{2,3})?>/g, "");
         linhasSincronizadas.push({ tempo, texto });
@@ -1834,7 +1806,7 @@ function carregarLinhasSincronizadasDoLrc(lrc) {
             }
         }
 
-        linhaSync.texto = linhaSync.texto.trim() || "♪";
+        linhaSync.texto = linhaSync.texto.trim() || "...";
         linhaSync.palavras = palavras;
     });
 
@@ -1928,128 +1900,13 @@ async function buscarLetra(canalYoutube, tituloVideo) {
     }
 
     const { tituloLimpo, tentativas } = gerarTentativasBuscaLetra(canalYoutube, tituloVideo);
-
-    try {
-        let track = await buscarNaLrclib(tentativas);
-
-        if (track && track.syncedLyrics) {
-            document.getElementById("painelSync").style.display = "flex";
-            atualizarStatusSincronia("Letra sincronizada encontrada. Aperte play para cantar no tempo.");
-
-            let lines = track.syncedLyrics.split("\n");
-
-            lines.forEach((linha, i) => {
-                let match = linha.match(/\[(\d{1,2}):(\d{2}(?:\.\d{2})?)\](.*)/);
-                if (!match) return;
-
-                let m = parseInt(match[1], 10);
-                let s = parseFloat(match[2]);
-                let tempo = (m * 60) + s;
-                let texto = match[3].trim() || "♪";
-
-                // Remove possíveis marcações de tempo por palavra (formato Enhanced LRC)
-                texto = texto.replace(/<\d{2}:\d{2}(?:\.\d{2,3})?>/g, "");
-
-                linhasSincronizadas.push({ tempo: tempo, texto: texto });
-            });
-
-            let indiceLinhaSync = 0;
-            lines.forEach((linha) => {
-                const match = linha.match(/\[(\d{1,2}):(\d{2}(?:\.\d{2})?)\](.*)/);
-                if (!match) return;
-
-                const linhaSync = linhasSincronizadas[indiceLinhaSync];
-                indiceLinhaSync++;
-                if (!linhaSync) return;
-
-                const conteudoBruto = match[3] || "";
-                const palavras = [];
-                const regexPalavra = /<(\d{2}):(\d{2}(?:\.\d{2,3})?)>([^<]*)/g;
-                let trecho = null;
-
-                while ((trecho = regexPalavra.exec(conteudoBruto)) !== null) {
-                    const tempoPalavra = (parseInt(trecho[1], 10) * 60) + parseFloat(trecho[2]);
-                    const textoPalavra = trecho[3] || "";
-
-                    if (textoPalavra) {
-                        palavras.push({ tempo: tempoPalavra, texto: textoPalavra });
-                    }
-                }
-
-                linhaSync.texto = linhaSync.texto.trim() || "♪";
-                linhaSync.palavras = palavras;
-            });
-
-            linhasSincronizadas.forEach((linhaAtual, indice) => {
-                const proximaLinha = linhasSincronizadas[indice + 1];
-                linhaAtual.tempoFinal = proximaLinha?.tempo || (linhaAtual.tempo + 2.5);
-            });
-
-            if (linhasSincronizadas.length > 0) {
-                renderizarPainelLetraSync(-1, 0, 0);
-            } else {
-                divLetra.classList.remove("letra-sync-painel");
-                divLetra.innerHTML = "<p>Letra sincronizada carregada.</p>";
-            }
-
-            if (cantando) {
-                clearInterval(syncInterval);
-                iniciarSyncLetra();
-            }
-        } else if (track && track.plainLyrics) {
-            divLetra.classList.remove("letra-sync-painel");
-            atualizarStatusSincronia("Letra encontrada sem marcacao de tempo. Use a rolagem como guia.");
-            divLetra.innerHTML = "<p style='color:var(--neon-yellow); font-size:0.9rem; margin-bottom:15px'>Aviso: letra encontrada sem sincronizacao automatica.</p>" + track.plainLyrics.replace(/\n/g, "<br><br>");
-        } else {
-            console.log("LRCLib falhou. Tentando API alternativa...");
-            let ovhLyrics = await buscarNaLyricsOvh(tentativas);
-
-            if (ovhLyrics) {
-                divLetra.classList.remove("letra-sync-painel");
-                atualizarStatusSincronia("Letra carregada do servidor auxiliar. A sincronizacao fica aproximada.");
-                divLetra.innerHTML = "<p style='color:var(--neon-yellow); font-size:0.9rem; margin-bottom:15px'>Aviso: letra resgatada do servidor auxiliar, sem sincronizacao.</p>" + ovhLyrics.replace(/\n/g, "<br><br>");
-            } else {
-                divLetra.classList.remove("letra-sync-painel");
-                atualizarStatusSincronia("Nao encontrei uma letra sincronizada para essa musica.");
-                divLetra.innerHTML = "<p><em>Letra nao encontrada na nossa base para '" + tituloLimpo + "'.</em></p>";
-            }
-        }
-    } catch (e) {
-        console.error(e);
-        divLetra.classList.remove("letra-sync-painel");
-        atualizarStatusSincronia("Erro ao carregar a letra. Tente outra versao da musica.");
-        divLetra.innerHTML = "<p><em>Erro de conexao ao buscar a letra.</em></p>";
-    }
-}
-
-async function buscarLetra(canalYoutube, tituloVideo) {
-    const divLetra = document.getElementById("divLetra");
-    if (!divLetra) return;
-
-    divLetra.innerHTML = "<p>Carregando letra...</p>";
-    divLetra.dataset.activeIndex = "";
-    atualizarStatusSincronia("Procurando letra sincronizada...");
-    linhasSincronizadas = [];
-    offsetLetra = 0;
-
-    if (!document.getElementById("painelSync")) {
-        let painel = document.createElement("div");
-        painel.id = "painelSync";
-        painel.className = "painel-sync";
-        painel.innerHTML = `
-            <span>Sincronia:</span>
-            <button onclick="mudarOffset(-0.5)" class="painel-sync-btn">-0.5s</button>
-            <span id="txtOffset">0s</span>
-            <button onclick="mudarOffset(0.5)" class="painel-sync-btn">+0.5s</button>
-        `;
-        divLetra.parentNode.insertBefore(painel, divLetra);
-    } else {
-        document.getElementById("painelSync").style.display = "none";
-        document.getElementById("txtOffset").innerText = "0s";
-    }
-
-    const { tituloLimpo, tentativas } = gerarTentativasBuscaLetra(canalYoutube, tituloVideo);
-    const cacheKeys = criarChavesCacheLetra(tituloLimpo, canalYoutube, tentativas);
+    const cacheKeys = combinarChavesCache(
+        criarChavesCacheDiretas(
+            localStorage.getItem("musicaAudio") || "",
+            localStorage.getItem("musicaBuscaOriginal") || ""
+        ),
+        criarChavesCacheLetra(tituloLimpo, canalYoutube, tentativas)
+    );
 
     try {
         let cacheHit = buscarLetraNoCache(cacheKeys);
@@ -2059,7 +1916,10 @@ async function buscarLetra(canalYoutube, tituloVideo) {
 
         if (!cacheHit) {
             try {
-                const supabaseHit = await buscarLetraSupabase([{ song: tituloLimpo, artist: canalYoutube }, ...tentativas]);
+                const supabaseHit = await buscarLetraSupabase(
+                    [{ song: tituloLimpo, artist: canalYoutube }, ...tentativas],
+                    cacheKeys
+                );
                 if (cacheLetraEhCompativel(supabaseHit, tituloLimpo, tentativas)) {
                     cacheHit = supabaseHit;
                     salvarLetraNoCache(cacheKeys, supabaseHit);
