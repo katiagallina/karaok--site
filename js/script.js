@@ -309,10 +309,19 @@ function gerarFiltrosArtistaLetraVerificada(tentativas = []) {
         if (!artista) return;
 
         const artistaNorm = normalizarComparacao(artista);
-        if (!artistaNorm || vistos.has(artistaNorm)) return;
-        vistos.add(artistaNorm);
+        if (!artistaNorm) return;
 
-        filtros.push(`and(artista_norm.eq.${encodeURIComponent(artistaNorm)},ativo.eq.true)`);
+        const candidatos = [artistaNorm, ...extrairTokensRelevantesTexto(artistaNorm)];
+        candidatos.forEach((candidato) => {
+            if (!candidato || candidato.length < 4 || vistos.has(candidato)) return;
+            vistos.add(candidato);
+
+            if (candidato === artistaNorm) {
+                filtros.push(`and(artista_norm.eq.${encodeURIComponent(candidato)},ativo.eq.true)`);
+            } else {
+                filtros.push(`and(artista_norm.ilike.${encodeURIComponent(`*${candidato}*`)},ativo.eq.true)`);
+            }
+        });
     });
 
     return filtros;
@@ -419,7 +428,7 @@ async function buscarLetraVerificadaSupabase(tentativas = []) {
         }))
         .sort((a, b) => b.score - a.score)[0];
 
-    if (!melhor || melhor.score < 110) {
+    if (!melhor || melhor.score < 95) {
         return null;
     }
 
