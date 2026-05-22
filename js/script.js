@@ -1448,9 +1448,14 @@ function iniciarSyncLetra() {
 
             const linhaAtual = linhasSincronizadas[ativa];
             const proximaLinha = linhasSincronizadas[ativa + 1] || null;
-            const tempoAteProxima = proximaLinha ? Math.max(proximaLinha.tempo - linhaAtual.tempo, 0.35) : 3.0;
-            const duracaoEstimada = Math.max(1.5, (linhaAtual.texto || "").length * 0.08);
-            const duracaoParaPreenchimento = Math.min(tempoAteProxima, duracaoEstimada);
+            const tempoAteProxima = proximaLinha
+                ? Math.max(proximaLinha.tempo - linhaAtual.tempo, 0.8)
+                : Math.max((linhaAtual.tempoFinal || linhaAtual.tempo + 3) - linhaAtual.tempo, 1.2);
+            const duracaoCalculadaLinha = Math.max((linhaAtual.tempoFinal || linhaAtual.tempo) - linhaAtual.tempo, 1.2);
+            const duracaoParaPreenchimento = Math.max(
+                1,
+                Math.min(tempoAteProxima, duracaoCalculadaLinha * 0.92)
+            );
             const progresso = Math.max(0, Math.min(((tempo - linhaAtual.tempo) / duracaoParaPreenchimento) * 100, 100));
 
             renderizarPainelLetraSync(ativa, progresso, tempo);
@@ -2208,6 +2213,20 @@ function carregarLinhasSincronizadasDoLrc(lrc) {
     });
 }
 
+function estimarPesoLinhaSemSync(texto = "") {
+    const textoLimpo = String(texto || "").trim();
+    if (!textoLimpo) return 1;
+
+    const palavras = textoLimpo.split(/\s+/).filter(Boolean);
+    const totalCaracteres = textoLimpo.replace(/\s+/g, "").length;
+    const pausas = (textoLimpo.match(/[,:;.!?()-]/g) || []).length;
+
+    return Math.max(
+        1.4,
+        (palavras.length * 1.25) + (totalCaracteres * 0.055) + (pausas * 0.35)
+    );
+}
+
 function gerarSincronizacaoAproximada(lyrics, duracaoBase = 0) {
     const linhas = extrairLinhasLimpas(lyrics);
     linhasSincronizadas = [];
@@ -2215,21 +2234,25 @@ function gerarSincronizacaoAproximada(lyrics, duracaoBase = 0) {
     if (linhas.length === 0) return false;
 
     const duracao = duracaoBase || obterDuracaoAtualMusica() || 150;
-    const inicio = Math.min(4, Math.max(0, duracao * 0.03));
-    const fim = Math.max(inicio + 1, duracao - 1.25);
+    const inicio = Math.min(18, Math.max(6, duracao * 0.08));
+    const fim = Math.max(inicio + 1, duracao - Math.min(6, Math.max(2.5, duracao * 0.04)));
     const janelaUtil = Math.max(fim - inicio, 1);
-    const intervalo = janelaUtil / Math.max(linhas.length, 1);
+    const pesos = linhas.map((texto) => estimarPesoLinhaSemSync(texto));
+    const pesoTotal = pesos.reduce((acc, valor) => acc + valor, 0) || linhas.length;
+    let cursor = inicio;
 
     linhas.forEach((texto, indice) => {
-        const tempo = Math.min(inicio + (indice * intervalo), fim);
+        const fatia = (pesos[indice] / pesoTotal) * janelaUtil;
+        const tempo = Math.min(cursor, fim);
         const tempoFinal = indice === linhas.length - 1
             ? fim
-            : Math.min(inicio + ((indice + 1) * intervalo), fim);
+            : Math.min(cursor + fatia, fim);
         linhasSincronizadas.push({
             tempo,
             texto,
-            tempoFinal: Math.max(tempoFinal, tempo + 0.35)
+            tempoFinal: Math.max(tempoFinal, tempo + 1.2)
         });
+        cursor = tempoFinal;
     });
 
     return linhasSincronizadas.length > 0;
