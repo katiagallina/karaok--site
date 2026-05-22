@@ -300,40 +300,137 @@ function gerarFiltrosLetraVerificada(tentativas = []) {
     return filtros;
 }
 
+function gerarFiltrosArtistaLetraVerificada(tentativas = []) {
+    const filtros = [];
+    const vistos = new Set();
+
+    tentativas.forEach((tentativa) => {
+        const artista = limparSegmentoMusical(tentativa.artist || "");
+        if (!artista) return;
+
+        const artistaNorm = normalizarComparacao(artista);
+        if (!artistaNorm || vistos.has(artistaNorm)) return;
+        vistos.add(artistaNorm);
+
+        filtros.push(`and(artista_norm.eq.${encodeURIComponent(artistaNorm)},ativo.eq.true)`);
+    });
+
+    return filtros;
+}
+
+function pontuarLetraVerificadaAproximada(item, tentativas = []) {
+    const tituloItem = item?.titulo || "";
+    const artistaItem = item?.artista || "";
+    let melhorScore = 0;
+
+    tentativas.forEach((tentativa) => {
+        const tituloTentativa = limparSegmentoMusical(tentativa.song || "");
+        const artistaTentativa = limparSegmentoMusical(tentativa.artist || "");
+        let score = 0;
+
+        score += pontuarCorrespondenciaTexto(tituloItem, tituloTentativa);
+        score += Math.round(pontuarCorrespondenciaTexto(artistaItem, artistaTentativa) * 0.7);
+
+        const tituloItemNorm = normalizarComparacao(tituloItem);
+        const tituloTentativaNorm = normalizarComparacao(tituloTentativa);
+        const tokensTentativa = extrairTokensRelevantesTexto(tituloTentativaNorm);
+        const tokensEncontrados = tokensTentativa.filter((token) => tituloItemNorm.includes(token)).length;
+
+        if (tokensTentativa.length > 0 && tokensEncontrados === tokensTentativa.length) {
+            score += 35;
+        } else if (tokensEncontrados > 0) {
+            score += tokensEncontrados * 10;
+        }
+
+        if (score > melhorScore) {
+            melhorScore = score;
+        }
+    });
+
+    return melhorScore;
+}
+
 async function buscarLetraVerificadaSupabase(tentativas = []) {
     const filtros = gerarFiltrosLetraVerificada(tentativas);
-    if (filtros.length === 0) return null;
+    const campos = "titulo,artista,plain_lyrics,synced_lyrics,fonte,observacao,updated_at";
 
-    const query = `select=titulo,artista,plain_lyrics,synced_lyrics,fonte,observacao,updated_at&or=(${filtros.join(",")})&order=updated_at.desc&limit=1`;
-    const resposta = await fetchComTimeout(
-        montarUrlSupabase(SUPABASE_VERIFIED_LYRICS_TABLE, query),
+    if (filtros.length > 0) {
+        const queryExata = `select=${campos}&or=(${filtros.join(",")})&order=updated_at.desc&limit=1`;
+        const respostaExata = await fetchComTimeout(
+            montarUrlSupabase(SUPABASE_VERIFIED_LYRICS_TABLE, queryExata),
+            2500,
+            {
+                headers: obterHeadersSupabase()
+            }
+        );
+
+        if (!respostaExata) {
+            throw new Error("[Supabase:verified_lyrics_select] Timeout ao consultar letras verificadas");
+        }
+
+        if (!respostaExata.ok) {
+            const erroTexto = await respostaExata.text();
+            throw criarErroSupabase("verified_lyrics_select", respostaExata, erroTexto);
+        }
+
+        const dataExata = await respostaExata.json();
+        if (Array.isArray(dataExata) && dataExata.length > 0) {
+            const item = dataExata[0];
+            return {
+                titulo: item.titulo || "",
+                artista: item.artista || "",
+                plainLyrics: item.plain_lyrics || "",
+                syncedLyrics: item.synced_lyrics || "",
+                source: item.fonte || "verified",
+                note: item.observacao || "",
+                updatedAt: item.updated_at || ""
+            };
+        }
+    }
+
+    const filtrosArtista = gerarFiltrosArtistaLetraVerificada(tentativas);
+    if (filtrosArtista.length === 0) return null;
+
+    const queryAproximada = `select=${campos}&or=(${filtrosArtista.join(",")})&order=updated_at.desc&limit=25`;
+    const respostaAproximada = await fetchComTimeout(
+        montarUrlSupabase(SUPABASE_VERIFIED_LYRICS_TABLE, queryAproximada),
         2500,
         {
             headers: obterHeadersSupabase()
         }
     );
 
-    if (!resposta) {
-        throw new Error("[Supabase:verified_lyrics_select] Timeout ao consultar letras verificadas");
+    if (!respostaAproximada) {
+        throw new Error("[Supabase:verified_lyrics_select_fuzzy] Timeout ao consultar letras verificadas");
     }
 
-    if (!resposta.ok) {
-        const erroTexto = await resposta.text();
-        throw criarErroSupabase("verified_lyrics_select", resposta, erroTexto);
+    if (!respostaAproximada.ok) {
+        const erroTexto = await respostaAproximada.text();
+        throw criarErroSupabase("verified_lyrics_select_fuzzy", respostaAproximada, erroTexto);
     }
 
-    const data = await resposta.json();
-    if (!Array.isArray(data) || data.length === 0) return null;
+    const dataAproximada = await respostaAproximada.json();
+    if (!Array.isArray(dataAproximada) || dataAproximada.length === 0) return null;
 
-    const item = data[0];
+    const melhor = dataAproximada
+        .map((item) => ({
+            item,
+            score: pontuarLetraVerificadaAproximada(item, tentativas)
+        }))
+        .sort((a, b) => b.score - a.score)[0];
+
+    if (!melhor || melhor.score < 110) {
+        return null;
+    }
+
     return {
-        titulo: item.titulo || "",
-        artista: item.artista || "",
-        plainLyrics: item.plain_lyrics || "",
-        syncedLyrics: item.synced_lyrics || "",
-        source: item.fonte || "verified",
-        note: item.observacao || "",
-        updatedAt: item.updated_at || ""
+        titulo: melhor.item.titulo || "",
+        artista: melhor.item.artista || "",
+        plainLyrics: melhor.item.plain_lyrics || "",
+        syncedLyrics: melhor.item.synced_lyrics || "",
+        source: melhor.item.fonte || "verified",
+        note: melhor.item.observacao || "",
+        updatedAt: melhor.item.updated_at || ""
     };
 }
 
