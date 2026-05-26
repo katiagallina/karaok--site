@@ -11,6 +11,7 @@ const LYRICS_CACHE_KEY = "lyricsCacheV2";
 const RESULTADO_ATUAL_ID_KEY = "resultadoAtualId";
 const RESULTADO_PROCESSADO_KEY = "ultimoResultadoProcessado";
 const RESULTADO_REMOTO_KEY = "ultimoResultadoRemoto";
+const MANUAL_SYNC_STORAGE_KEY = "manualLyricsSyncV1";
 const LIMITE_RESULTADOS_BUSCA = 6;
 const DURACAO_MINIMA_VIDEO_SEGUNDOS = 75;
 const DURACAO_MAXIMA_VIDEO_SEGUNDOS = 900;
@@ -28,6 +29,11 @@ let finalizacaoEmAndamento = false;
 let letraAproximadaAtiva = false;
 let letraAtualSemSync = "";
 let duracaoBaseSyncAproximada = 0;
+let sincronizacaoManualAtiva = false;
+let sincronizacaoManualConcluida = false;
+let linhasBaseSyncManual = [];
+let linhasMarcadasSyncManual = [];
+let indiceMarcacaoManual = 0;
 
 const yt = localStorage.getItem("musicaAudio");
 const pagina = window.location.pathname;
@@ -848,6 +854,19 @@ if (pagina.includes("karaoke.html")) {
 
         if (musicaNome) buscarLetra(musicaArtista || musicaCanalYoutube || "", musicaTituloOriginal || musicaNome);
         if (yt) carregarAPIYouTube();
+
+        document.addEventListener("keydown", (event) => {
+            if (!sincronizacaoManualAtiva) return;
+            if (event.repeat) return;
+            if (event.code !== "Space" && event.code !== "Enter") return;
+
+            const alvo = event.target;
+            const tag = alvo && alvo.tagName ? alvo.tagName.toUpperCase() : "";
+            if (tag === "INPUT" || tag === "TEXTAREA" || alvo?.isContentEditable) return;
+
+            event.preventDefault();
+            marcarLinhaSyncManual();
+        });
     });
 } else if (pagina.endsWith("resultado.html")) {
     window.addEventListener("DOMContentLoaded", () => {
@@ -2139,12 +2158,14 @@ function obterArtistaTrackLetra(track, fallback = "") {
 function renderizarLetraPrioritaria(divLetra, letra, status) {
     if (letra?.syncedLyrics) {
         limparEstadoLetraAproximada();
+        resetarMarcacaoManual();
         document.getElementById("painelSync").style.display = "flex";
         atualizarStatusSincronia(status || "Letra validada encontrada. Aperte play para cantar no tempo.");
         carregarLinhasSincronizadasDoLrc(letra.syncedLyrics);
 
         if (linhasSincronizadas.length > 0) {
             renderizarPainelLetraSync(-1, 0, 0);
+            atualizarPainelSyncManual();
             if (cantando) {
                 clearInterval(syncInterval);
                 iniciarSyncLetra();
@@ -2170,6 +2191,188 @@ function limparEstadoLetraAproximada() {
     letraAproximadaAtiva = false;
     letraAtualSemSync = "";
     duracaoBaseSyncAproximada = 0;
+}
+
+function obterSyncManualStorage() {
+    try {
+        return JSON.parse(localStorage.getItem(MANUAL_SYNC_STORAGE_KEY) || "{}");
+    } catch (erro) {
+        logErroPadrao("Sync manual local", erro);
+        return {};
+    }
+}
+
+function salvarSyncManualStorage(cache = {}) {
+    try {
+        localStorage.setItem(MANUAL_SYNC_STORAGE_KEY, JSON.stringify(cache || {}));
+    } catch (erro) {
+        logErroPadrao("Sync manual local", erro);
+    }
+}
+
+function obterChaveSyncManualAtual() {
+    const videoId = localStorage.getItem("musicaAudio") || "";
+    return videoId ? `video__${videoId}` : "";
+}
+
+function formatarTempoLrc(segundos = 0) {
+    const total = Math.max(0, Number(segundos) || 0);
+    const minutos = Math.floor(total / 60);
+    const segundosRestantes = total - (minutos * 60);
+    return `${String(minutos).padStart(2, "0")}:${segundosRestantes.toFixed(2).padStart(5, "0")}`;
+}
+
+function montarLrcDeLinhasMarcadas(linhasMarcadas = []) {
+    return linhasMarcadas
+        .filter((linha) => linha && Number.isFinite(linha.tempo) && linha.texto)
+        .map((linha) => `[${formatarTempoLrc(linha.tempo)}]${linha.texto}`)
+        .join("\n");
+}
+
+function salvarSincronizacaoManualAtual() {
+    const chave = obterChaveSyncManualAtual();
+    if (!chave || linhasMarcadasSyncManual.length === 0) return false;
+
+    const cache = obterSyncManualStorage();
+    cache[chave] = {
+        syncedLyrics: montarLrcDeLinhasMarcadas(linhasMarcadasSyncManual),
+        plainLyrics: letraAtualSemSync || linhasBaseSyncManual.join("\n"),
+        titulo: localStorage.getItem("musicaNome") || "",
+        updatedAt: new Date().toISOString()
+    };
+    salvarSyncManualStorage(cache);
+    return true;
+}
+
+function carregarSincronizacaoManualSalva() {
+    const chave = obterChaveSyncManualAtual();
+    if (!chave) return null;
+
+    const cache = obterSyncManualStorage();
+    const item = cache[chave];
+    if (!item?.syncedLyrics) return null;
+    return item;
+}
+
+function resetarMarcacaoManual() {
+    sincronizacaoManualAtiva = false;
+    sincronizacaoManualConcluida = false;
+    linhasBaseSyncManual = [];
+    linhasMarcadasSyncManual = [];
+    indiceMarcacaoManual = 0;
+}
+
+function atualizarPainelSyncManual() {
+    const painel = document.getElementById("painelSync");
+    if (!painel) return;
+
+    const btnIniciar = document.getElementById("btnIniciarSyncManual");
+    const btnMarcar = document.getElementById("btnMarcarSyncManual");
+    const btnSalvar = document.getElementById("btnSalvarSyncManual");
+    const btnCancelar = document.getElementById("btnCancelarSyncManual");
+    const info = document.getElementById("txtSyncManual");
+
+    if (btnIniciar) btnIniciar.style.display = letraAproximadaAtiva && !sincronizacaoManualAtiva ? "inline-flex" : "none";
+    if (btnMarcar) btnMarcar.style.display = sincronizacaoManualAtiva ? "inline-flex" : "none";
+    if (btnSalvar) btnSalvar.style.display = sincronizacaoManualConcluida ? "inline-flex" : "none";
+    if (btnCancelar) btnCancelar.style.display = (sincronizacaoManualAtiva || sincronizacaoManualConcluida) ? "inline-flex" : "none";
+
+    if (info) {
+        if (sincronizacaoManualAtiva) {
+            const total = linhasBaseSyncManual.length || 0;
+            const atual = Math.min(indiceMarcacaoManual + 1, total);
+            info.innerText = `Marcando ${atual}/${total}`;
+        } else if (sincronizacaoManualConcluida) {
+            info.innerText = "Marcacao pronta";
+        } else if (letraAproximadaAtiva) {
+            info.innerText = "Modo aproximado";
+        } else {
+            info.innerText = "";
+        }
+    }
+}
+
+function iniciarMarcacaoManual() {
+    if (!ytPlayer || typeof ytPlayer.getCurrentTime !== "function") return;
+
+    linhasBaseSyncManual = extrairLinhasLimpas(letraAtualSemSync);
+    if (linhasBaseSyncManual.length === 0) return;
+
+    sincronizacaoManualAtiva = true;
+    sincronizacaoManualConcluida = false;
+    linhasMarcadasSyncManual = [];
+    indiceMarcacaoManual = 0;
+    linhasSincronizadas = [];
+    renderizarPainelLetraSync(-1, 0, 0);
+    atualizarStatusSincronia("Marcacao manual ativa. Clique em 'Marcar linha' quando cada verso comecar.");
+    atualizarPainelSyncManual();
+}
+
+function concluirMarcacaoManual() {
+    sincronizacaoManualAtiva = false;
+    sincronizacaoManualConcluida = linhasMarcadasSyncManual.length > 0;
+    const lrcManual = montarLrcDeLinhasMarcadas(linhasMarcadasSyncManual);
+
+    if (lrcManual) {
+        carregarLinhasSincronizadasDoLrc(lrcManual);
+        renderizarPainelLetraSync(-1, 0, 0);
+        atualizarStatusSincronia("Marcacao concluida. Salve para reutilizar essa sincronia.");
+    }
+
+    atualizarPainelSyncManual();
+}
+
+function marcarLinhaSyncManual() {
+    if (!sincronizacaoManualAtiva || !ytPlayer || typeof ytPlayer.getCurrentTime !== "function") return;
+    if (indiceMarcacaoManual >= linhasBaseSyncManual.length) {
+        concluirMarcacaoManual();
+        return;
+    }
+
+    const texto = linhasBaseSyncManual[indiceMarcacaoManual];
+    const tempo = Math.max(0, (Number(ytPlayer.getCurrentTime()) || 0) + offsetLetra);
+    linhasMarcadasSyncManual.push({ tempo, texto });
+    indiceMarcacaoManual += 1;
+
+    const lrcParcial = montarLrcDeLinhasMarcadas(linhasMarcadasSyncManual);
+    if (lrcParcial) {
+        carregarLinhasSincronizadasDoLrc(lrcParcial);
+        renderizarPainelLetraSync(linhasSincronizadas.length - 1, 0, tempo);
+    }
+
+    if (indiceMarcacaoManual >= linhasBaseSyncManual.length) {
+        concluirMarcacaoManual();
+        return;
+    }
+
+    atualizarStatusSincronia(`Linha marcada. Prepare a entrada de: "${linhasBaseSyncManual[indiceMarcacaoManual]}"`);
+    atualizarPainelSyncManual();
+}
+
+function salvarSyncManual() {
+    if (!sincronizacaoManualConcluida || linhasMarcadasSyncManual.length === 0) return;
+
+    if (salvarSincronizacaoManualAtual()) {
+        letraAproximadaAtiva = false;
+        atualizarStatusSincronia("Sincronia manual salva. Essa musica vai abrir no ritmo marcado.");
+    }
+
+    sincronizacaoManualConcluida = false;
+    atualizarPainelSyncManual();
+}
+
+function cancelarSyncManual() {
+    resetarMarcacaoManual();
+    if (letraAtualSemSync) {
+        renderizarLetraSemSync(
+            document.getElementById("divLetra"),
+            letraAtualSemSync,
+            "Aviso: letra sem sincronizacao exata.",
+            "Letra sem marcacao de tempo. Use a sincronizacao aproximada como guia."
+        );
+    } else {
+        atualizarPainelSyncManual();
+    }
 }
 
 function carregarLinhasSincronizadasDoLrc(lrc) {
@@ -2242,9 +2445,11 @@ function gerarSincronizacaoAproximada(lyrics, duracaoBase = 0) {
 
     if (linhas.length === 0) return false;
 
-    const duracao = duracaoBase || obterDuracaoAtualMusica() || 150;
-    const inicio = Math.min(18, Math.max(6, duracao * 0.08));
-    const fim = Math.max(inicio + 1, duracao - Math.min(6, Math.max(2.5, duracao * 0.04)));
+    const duracao = duracaoBase || obterDuracaoEsperadaLetra() || 210;
+    const introEstimado = Math.min(26, Math.max(10, duracao * 0.12));
+    const outroReservado = Math.min(12, Math.max(4, duracao * 0.07));
+    const inicio = Math.min(introEstimado, Math.max(8, duracao * 0.1));
+    const fim = Math.max(inicio + 1, duracao - outroReservado);
     const janelaUtil = Math.max(fim - inicio, 1);
     const pesos = linhas.map((texto) => estimarPesoLinhaSemSync(texto));
     const pesoTotal = pesos.reduce((acc, valor) => acc + valor, 0) || linhas.length;
@@ -2253,13 +2458,20 @@ function gerarSincronizacaoAproximada(lyrics, duracaoBase = 0) {
     linhas.forEach((texto, indice) => {
         const fatia = (pesos[indice] / pesoTotal) * janelaUtil;
         const tempo = Math.min(cursor, fim);
+        const minimoLinha = Math.min(
+            7.5,
+            Math.max(
+                2.2,
+                (texto.split(/\s+/).filter(Boolean).length * 0.48) + 1.1
+            )
+        );
         const tempoFinal = indice === linhas.length - 1
             ? fim
-            : Math.min(cursor + fatia, fim);
+            : Math.min(Math.max(cursor + fatia, tempo + minimoLinha), fim);
         linhasSincronizadas.push({
             tempo,
             texto,
-            tempoFinal: Math.max(tempoFinal, tempo + 1.2)
+            tempoFinal: Math.max(tempoFinal, tempo + minimoLinha)
         });
         cursor = tempoFinal;
     });
@@ -2301,12 +2513,14 @@ function renderizarLetraSemSync(divLetra, lyrics, aviso, status) {
     const temSyncAproximada = gerarSincronizacaoAproximada(lyrics);
 
     if (temSyncAproximada) {
+        resetarMarcacaoManual();
         letraAproximadaAtiva = true;
         letraAtualSemSync = lyrics || "";
         duracaoBaseSyncAproximada = obterDuracaoAtualMusica() || 150;
         if (painelSync) painelSync.style.display = "flex";
         atualizarStatusSincronia(status);
         renderizarPainelLetraSync(-1, 0, 0);
+        atualizarPainelSyncManual();
 
         if (cantando) {
             clearInterval(syncInterval);
@@ -2323,9 +2537,11 @@ function renderizarLetraSemSync(divLetra, lyrics, aviso, status) {
 
 function renderizarLetraNaoEncontrada(divLetra, tituloLimpo) {
     limparEstadoLetraAproximada();
+    resetarMarcacaoManual();
     divLetra.classList.remove("letra-sync-painel");
     atualizarStatusSincronia("Ainda nao encontrei essa letra. Tente outra versao da musica.");
     divLetra.innerHTML = `<p><em>Ainda nao encontrei a letra para '${escaparHtml(tituloLimpo)}'.</em></p><p style="opacity:0.8">Dica: tente outra versao do video ou pesquise usando apenas artista e musica.</p>`;
+    atualizarPainelSyncManual();
 }
 
 // ============================================================
@@ -2341,6 +2557,7 @@ async function buscarLetra(canalYoutube, tituloVideo) {
     linhasSincronizadas = [];
     offsetLetra = 0;
     limparEstadoLetraAproximada();
+    resetarMarcacaoManual();
 
     if (!document.getElementById("painelSync")) {
         let painel = document.createElement("div");
@@ -2351,6 +2568,11 @@ async function buscarLetra(canalYoutube, tituloVideo) {
             <button onclick="mudarOffset(-0.5)" class="painel-sync-btn">-0.5s</button>
             <span id="txtOffset">0s</span>
             <button onclick="mudarOffset(0.5)" class="painel-sync-btn">+0.5s</button>
+            <button id="btnIniciarSyncManual" onclick="iniciarMarcacaoManual()" class="painel-sync-btn" style="display:none;">Marcar ritmo</button>
+            <button id="btnMarcarSyncManual" onclick="marcarLinhaSyncManual()" class="painel-sync-btn" style="display:none;">Marcar linha</button>
+            <button id="btnSalvarSyncManual" onclick="salvarSyncManual()" class="painel-sync-btn" style="display:none;">Salvar</button>
+            <button id="btnCancelarSyncManual" onclick="cancelarSyncManual()" class="painel-sync-btn" style="display:none;">Cancelar</button>
+            <span id="txtSyncManual"></span>
         `;
         divLetra.parentNode.insertBefore(painel, divLetra);
     } else {
@@ -2379,6 +2601,24 @@ async function buscarLetra(canalYoutube, tituloVideo) {
     }
 
     try {
+        const syncManualSalva = carregarSincronizacaoManualSalva();
+        if (syncManualSalva?.syncedLyrics) {
+            limparEstadoLetraAproximada();
+            document.getElementById("painelSync").style.display = "flex";
+            atualizarStatusSincronia("Sincronia manual encontrada para essa musica.");
+            carregarLinhasSincronizadasDoLrc(syncManualSalva.syncedLyrics);
+
+            if (linhasSincronizadas.length > 0) {
+                renderizarPainelLetraSync(-1, 0, 0);
+                atualizarPainelSyncManual();
+                if (cantando) {
+                    clearInterval(syncInterval);
+                    iniciarSyncLetra();
+                }
+                return;
+            }
+        }
+
         try {
             const letraVerificada = await buscarLetraVerificadaSupabase([
                 { song: tituloLimpo, artist: canalYoutube },
@@ -2529,9 +2769,11 @@ async function buscarLetra(canalYoutube, tituloVideo) {
         renderizarLetraNaoEncontrada(divLetra, tituloLimpo);
     } catch (e) {
         console.error(e);
+        resetarMarcacaoManual();
         divLetra.classList.remove("letra-sync-painel");
         atualizarStatusSincronia("Erro ao carregar a letra. Tente outra versao da musica.");
         divLetra.innerHTML = "<p><em>Erro de conexao ao buscar a letra.</em></p>";
+        atualizarPainelSyncManual();
     }
 }
 
