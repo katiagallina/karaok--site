@@ -3,8 +3,6 @@ const YOUTUBE_API_KEY = "AIzaSyBhpdlWVIHHVDOg9rRBWMc5uyAAcEoqazA";
 const SUPABASE_URL = "https://ybantvgcrelqwyvjkvsj.supabase.co";
 const SUPABASE_KEY = "sb_publishable_YOnl_Qc5PQ5o9229nVx8Yg_ArNvGUHS";
 const SUPABASE_TABLE = "ranking";
-const SUPABASE_LYRICS_TABLE = "lyrics_cache";
-const SUPABASE_VERIFIED_LYRICS_TABLE = "lyrics_verified";
 const SUPABASE_REST_PATH = "/rest/v1";
 const RANKING_STORAGE_KEY = "rankingLocal";
 const LYRICS_CACHE_KEY = "lyricsCacheV2";
@@ -35,6 +33,7 @@ let linhasBaseSyncManual = [];
 let linhasMarcadasSyncManual = [];
 let indiceMarcacaoManual = 0;
 
+let backupLinhasSincronizadas = [];
 const yt = localStorage.getItem("musicaAudio");
 const pagina = window.location.pathname;
 
@@ -285,282 +284,6 @@ function cacheLetraEhCompativel(cacheHit, tituloLimpo, tentativas) {
     return tituloOk && artistaOk && duracaoOk && genericoOk;
 }
 
-function gerarFiltrosLetraVerificada(tentativas = []) {
-    const filtros = [];
-    const vistos = new Set();
-
-    tentativas.forEach((tentativa) => {
-        const titulo = limparSegmentoMusical(tentativa.song || "");
-        const artista = limparSegmentoMusical(tentativa.artist || "");
-        if (!titulo) return;
-
-        const chave = `${titulo.toLowerCase()}|${artista.toLowerCase()}`;
-        if (vistos.has(chave)) return;
-        vistos.add(chave);
-
-        const tituloEncoded = encodeURIComponent(`eq.${titulo}`);
-        const artistaEncoded = encodeURIComponent(`eq.${artista}`);
-        filtros.push(`and(titulo_norm.${tituloEncoded},artista_norm.${artistaEncoded},ativo.eq.true)`);
-    });
-
-    return filtros;
-}
-
-function gerarFiltrosArtistaLetraVerificada(tentativas = []) {
-    const filtros = [];
-    const vistos = new Set();
-
-    tentativas.forEach((tentativa) => {
-        const artista = limparSegmentoMusical(tentativa.artist || "");
-        if (!artista) return;
-
-        const artistaNorm = normalizarComparacao(artista);
-        if (!artistaNorm) return;
-
-        const candidatos = [artistaNorm, ...extrairTokensRelevantesTexto(artistaNorm)];
-        candidatos.forEach((candidato) => {
-            if (!candidato || candidato.length < 4 || vistos.has(candidato)) return;
-            vistos.add(candidato);
-
-            if (candidato === artistaNorm) {
-                filtros.push(`and(artista_norm.eq.${encodeURIComponent(candidato)},ativo.eq.true)`);
-            } else {
-                filtros.push(`and(artista_norm.ilike.${encodeURIComponent(`*${candidato}*`)},ativo.eq.true)`);
-            }
-        });
-    });
-
-    return filtros;
-}
-
-function pontuarLetraVerificadaAproximada(item, tentativas = []) {
-    const tituloItem = item?.titulo || "";
-    const artistaItem = item?.artista || "";
-    let melhorScore = 0;
-
-    tentativas.forEach((tentativa) => {
-        const tituloTentativa = limparSegmentoMusical(tentativa.song || "");
-        const artistaTentativa = limparSegmentoMusical(tentativa.artist || "");
-        let score = 0;
-
-        score += pontuarCorrespondenciaTexto(tituloItem, tituloTentativa);
-        score += Math.round(pontuarCorrespondenciaTexto(artistaItem, artistaTentativa) * 0.7);
-
-        const tituloItemNorm = normalizarComparacao(tituloItem);
-        const tituloTentativaNorm = normalizarComparacao(tituloTentativa);
-        const tokensTentativa = extrairTokensRelevantesTexto(tituloTentativaNorm);
-        const tokensEncontrados = tokensTentativa.filter((token) => tituloItemNorm.includes(token)).length;
-
-        if (tokensTentativa.length > 0 && tokensEncontrados === tokensTentativa.length) {
-            score += 35;
-        } else if (tokensEncontrados > 0) {
-            score += tokensEncontrados * 10;
-        }
-
-        if (score > melhorScore) {
-            melhorScore = score;
-        }
-    });
-
-    return melhorScore;
-}
-
-async function buscarLetraVerificadaSupabase(tentativas = []) {
-    const filtros = gerarFiltrosLetraVerificada(tentativas);
-    const campos = "titulo,artista,plain_lyrics,synced_lyrics,fonte,observacao,updated_at";
-
-    if (filtros.length > 0) {
-        const queryExata = `select=${campos}&or=(${filtros.join(",")})&order=updated_at.desc&limit=1`;
-        const respostaExata = await fetchComTimeout(
-            montarUrlSupabase(SUPABASE_VERIFIED_LYRICS_TABLE, queryExata),
-            2500,
-            {
-                headers: obterHeadersSupabase()
-            }
-        );
-
-        if (!respostaExata) {
-            throw new Error("[Supabase:verified_lyrics_select] Timeout ao consultar letras verificadas");
-        }
-
-        if (!respostaExata.ok) {
-            const erroTexto = await respostaExata.text();
-            throw criarErroSupabase("verified_lyrics_select", respostaExata, erroTexto);
-        }
-
-        const dataExata = await respostaExata.json();
-        if (Array.isArray(dataExata) && dataExata.length > 0) {
-            const item = dataExata[0];
-            return {
-                titulo: item.titulo || "",
-                artista: item.artista || "",
-                plainLyrics: item.plain_lyrics || "",
-                syncedLyrics: item.synced_lyrics || "",
-                source: item.fonte || "verified",
-                note: item.observacao || "",
-                updatedAt: item.updated_at || ""
-            };
-        }
-    }
-
-    const filtrosArtista = gerarFiltrosArtistaLetraVerificada(tentativas);
-    if (filtrosArtista.length === 0) return null;
-
-    const queryAproximada = `select=${campos}&or=(${filtrosArtista.join(",")})&order=updated_at.desc&limit=25`;
-    const respostaAproximada = await fetchComTimeout(
-        montarUrlSupabase(SUPABASE_VERIFIED_LYRICS_TABLE, queryAproximada),
-        2500,
-        {
-            headers: obterHeadersSupabase()
-        }
-    );
-
-    if (!respostaAproximada) {
-        throw new Error("[Supabase:verified_lyrics_select_fuzzy] Timeout ao consultar letras verificadas");
-    }
-
-    if (!respostaAproximada.ok) {
-        const erroTexto = await respostaAproximada.text();
-        throw criarErroSupabase("verified_lyrics_select_fuzzy", respostaAproximada, erroTexto);
-    }
-
-    const dataAproximada = await respostaAproximada.json();
-    if (!Array.isArray(dataAproximada) || dataAproximada.length === 0) return null;
-
-    const melhor = dataAproximada
-        .map((item) => ({
-            item,
-            score: pontuarLetraVerificadaAproximada(item, tentativas)
-        }))
-        .sort((a, b) => b.score - a.score)[0];
-
-    if (!melhor || melhor.score < 95) {
-        return null;
-    }
-
-    return {
-        titulo: melhor.item.titulo || "",
-        artista: melhor.item.artista || "",
-        plainLyrics: melhor.item.plain_lyrics || "",
-        syncedLyrics: melhor.item.synced_lyrics || "",
-        source: melhor.item.fonte || "verified",
-        note: melhor.item.observacao || "",
-        updatedAt: melhor.item.updated_at || ""
-    };
-}
-
-async function salvarLetraVerificadaSupabase(payload = null) {
-    if (!payload?.titulo) return false;
-
-    const titulo = limparSegmentoMusical(payload.titulo || "");
-    const artista = limparSegmentoMusical(payload.artista || "");
-    if (!titulo) return false;
-
-    const registro = {
-        titulo,
-        artista,
-        titulo_norm: normalizarComparacao(titulo),
-        artista_norm: normalizarComparacao(artista),
-        plain_lyrics: payload.plainLyrics || "",
-        synced_lyrics: payload.syncedLyrics || "",
-        fonte: payload.source || "manual",
-        observacao: payload.note || "",
-        ativo: payload.active !== false,
-        updated_at: new Date().toISOString()
-    };
-
-    try {
-        const resposta = await fetch(montarUrlSupabase(SUPABASE_VERIFIED_LYRICS_TABLE), {
-            method: "POST",
-            headers: obterHeadersSupabase({
-                Prefer: "resolution=merge-duplicates,return=minimal"
-            }),
-            body: JSON.stringify([registro])
-        });
-
-        if (!resposta.ok) {
-            const erroTexto = await resposta.text();
-            throw criarErroSupabase("verified_lyrics_upsert", resposta, erroTexto);
-        }
-
-        return true;
-    } catch (erro) {
-        logErroPadrao("Supabase verified lyrics upsert", erro);
-        return false;
-    }
-}
-
-async function buscarLetraSupabase(tentativas = [], chavesExtras = []) {
-    const chaves = combinarChavesCache(
-        chavesExtras,
-        criarChavesCacheLetra("", "", tentativas)
-    );
-    if (chaves.length === 0) return null;
-
-    const filtros = chaves.map((chave) => `cache_key.eq.${encodeURIComponent(chave)}`).join(",");
-    const query = `select=cache_key,titulo,artista,plain_lyrics,synced_lyrics,source,updated_at&or=(${filtros})&order=updated_at.desc&limit=1`;
-    const resposta = await fetchComTimeout(
-        montarUrlSupabase(SUPABASE_LYRICS_TABLE, query),
-        2500,
-        {
-            headers: obterHeadersSupabase()
-        }
-    );
-
-    if (!resposta) {
-        throw new Error("[Supabase:lyrics_select] Timeout ao consultar cache remoto de letras");
-    }
-
-    if (!resposta.ok) {
-        const erroTexto = await resposta.text();
-        throw criarErroSupabase("lyrics_select", resposta, erroTexto);
-    }
-
-    const data = await resposta.json();
-    if (!Array.isArray(data) || data.length === 0) return null;
-
-    const item = data[0];
-    return {
-        titulo: item.titulo || "",
-        artista: item.artista || "",
-        plainLyrics: item.plain_lyrics || "",
-        syncedLyrics: item.synced_lyrics || "",
-        source: item.source || "supabase",
-        updatedAt: item.updated_at || ""
-    };
-}
-
-async function salvarLetraSupabase(chaves = [], payload = null) {
-    if (!payload || chaves.length === 0) return;
-
-    const registros = chaves.map((cacheKey) => ({
-        cache_key: cacheKey,
-        titulo: payload.titulo || "",
-        artista: payload.artista || "",
-        plain_lyrics: payload.plainLyrics || "",
-        synced_lyrics: payload.syncedLyrics || "",
-        source: payload.source || "desconhecida",
-        updated_at: new Date().toISOString()
-    }));
-
-    try {
-        const resposta = await fetch(montarUrlSupabase(SUPABASE_LYRICS_TABLE), {
-            method: "POST",
-            headers: obterHeadersSupabase({
-                Prefer: "resolution=merge-duplicates,return=minimal"
-            }),
-            body: JSON.stringify(registros)
-        });
-
-        if (!resposta.ok) {
-            const erroTexto = await resposta.text();
-            throw criarErroSupabase("lyrics_upsert", resposta, erroTexto);
-        }
-    } catch (erro) {
-        logErroPadrao("Supabase lyrics upsert", erro);
-    }
-}
-
 function obterInicioDoDiaISO() {
     const agora = new Date();
     const inicio = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate(), 0, 0, 0, 0);
@@ -603,9 +326,9 @@ function obterPontuacaoAtual() {
 }
 
 function gerarAvaliacao(pontuacao) {
-    if (pontuacao >= 120) return "Performance brilhante! Voce dominou essa musica.";
-    if (pontuacao >= 80) return "Mandou muito bem! Sua pontuacao ficou excelente.";
-    if (pontuacao >= 40) return "Boa apresentacao! Da para buscar ainda mais pontos.";
+    if (pontuacao >= 180) return "Performance brilhante! Voce dominou essa musica.";
+    if (pontuacao >= 100) return "Mandou muito bem! Sua pontuacao ficou excelente.";
+    if (pontuacao >= 50) return "Boa apresentacao! Da para buscar ainda mais pontos.";
     return "Voce ja comecou cantando. Continue praticando para subir no ranking.";
 }
 
@@ -1085,9 +808,24 @@ function iniciarPontuacaoProgressiva() {
     pontuacaoInterval = setInterval(() => {
         if (!cantando || !ytPlayer || ytPlayer.getPlayerState() !== 1) return;
 
-        const atual = parseInt((placar.innerText || "").replace(/\D/g, ""), 10) || 0;
-        placar.innerHTML = "&#11088; " + (atual + 1);
-    }, 2500);
+            // Só pontua se houver uma linha de fato e estivermos no momento exato em que ela passa na tela
+            if (ultimaLinhaAtiva >= 0 && linhasSincronizadas.length > 0) {
+                const linhaAtual = linhasSincronizadas[ultimaLinhaAtiva];
+                const tempo = ytPlayer.getCurrentTime() + offsetLetra;
+                const tempoFim = linhaAtual.tempoFinal || (linhaAtual.tempo + 3);
+
+                if (tempo >= linhaAtual.tempo && tempo <= tempoFim) {
+                    const atual = parseInt((placar.innerText || "").replace(/\D/g, ""), 10) || 0;
+                    // Adiciona uma quantidade aleatória (1 a 3 pontos) para simular diferentes notas vocais
+                    const pontosGanhos = Math.floor(Math.random() * 3) + 1;
+                    placar.innerHTML = "&#11088; " + (atual + pontosGanhos);
+                    
+                    // Efeito de "pulsação" animada na estrela usando as transições já contidas no seu CSS
+                    placar.style.transform = "scale(1.15)";
+                    setTimeout(() => placar.style.transform = "scale(1)", 150);
+                }
+            }
+        }, 600); // Avalia e roda bem mais rápido (a cada 0.6s) pra dar a emoção dos pontos subindo freneticamente!
 }
 
 function atualizarStatusSincronia(texto) {
@@ -1374,6 +1112,15 @@ function pontuarResultadoMusica(item, termoBusca) {
     return { score, meta };
 }
 
+function calcularDuracaoEstimadaDaLinha(texto) {
+    const textoLimpo = String(texto || "").trim();
+    if (!textoLimpo) return 1.0;
+    const qtdLetras = textoLimpo.length;
+    const qtdPalavras = textoLimpo.split(/\s+/).filter(Boolean).length;
+    
+    return Math.max(1.2, (qtdLetras * 0.075) + (qtdPalavras * 0.15));
+}
+
 function renderizarPainelLetraSync(indiceAtual, progresso = 0, tempoAtual = 0) {
     const divLetra = document.getElementById("divLetra");
     if (!divLetra) return;
@@ -1476,13 +1223,15 @@ function iniciarSyncLetra() {
 
             const linhaAtual = linhasSincronizadas[ativa];
             const proximaLinha = linhasSincronizadas[ativa + 1] || null;
-            const tempoAteProxima = proximaLinha
-                ? Math.max(proximaLinha.tempo - linhaAtual.tempo, 0.8)
-                : Math.max((linhaAtual.tempoFinal || linhaAtual.tempo + 3) - linhaAtual.tempo, 1.2);
-            const duracaoCalculadaLinha = Math.max((linhaAtual.tempoFinal || linhaAtual.tempo) - linhaAtual.tempo, 1.2);
-            const duracaoParaPreenchimento = Math.max(
-                1,
-                Math.min(tempoAteProxima, duracaoCalculadaLinha * 0.92)
+
+            const tempoAteProxima = proximaLinha 
+                ? Math.max(proximaLinha.tempo - linhaAtual.tempo, 0.5) 
+                : Math.max((linhaAtual.tempoFinal || linhaAtual.tempo + 4) - linhaAtual.tempo, 2.0);
+
+            const estimativaCanto = calcularDuracaoEstimadaDaLinha(linhaAtual.texto);
+            const duracaoParaPreenchimento = Math.min(
+                tempoAteProxima * 0.95,
+                Math.max(estimativaCanto, tempoAteProxima * 0.4)
             );
             const progresso = Math.max(0, Math.min(((tempo - linhaAtual.tempo) / duracaoParaPreenchimento) * 100, 100));
 
@@ -2271,8 +2020,8 @@ function atualizarPainelSyncManual() {
     const btnSalvar = document.getElementById("btnSalvarSyncManual");
     const btnCancelar = document.getElementById("btnCancelarSyncManual");
     const info = document.getElementById("txtSyncManual");
-
-    if (btnIniciar) btnIniciar.style.display = letraAproximadaAtiva && !sincronizacaoManualAtiva ? "inline-flex" : "none";
+    const podeIniciar = (letraAproximadaAtiva || linhasSincronizadas.length > 0) && !sincronizacaoManualAtiva;
+    if (btnIniciar) btnIniciar.style.display = podeIniciar ? "inline-flex" : "none";
     if (btnMarcar) btnMarcar.style.display = sincronizacaoManualAtiva ? "inline-flex" : "none";
     if (btnSalvar) btnSalvar.style.display = sincronizacaoManualConcluida ? "inline-flex" : "none";
     if (btnCancelar) btnCancelar.style.display = (sincronizacaoManualAtiva || sincronizacaoManualConcluida) ? "inline-flex" : "none";
@@ -2358,12 +2107,21 @@ function salvarSyncManual() {
     }
 
     sincronizacaoManualConcluida = false;
+    backupLinhasSincronizadas = [];
     atualizarPainelSyncManual();
 }
 
 function cancelarSyncManual() {
+    const tinhaBackup = backupLinhasSincronizadas.length > 0;
     resetarMarcacaoManual();
-    if (letraAtualSemSync) {
+
+    if (tinhaBackup) {
+        linhasSincronizadas = [...backupLinhasSincronizadas];
+        backupLinhasSincronizadas = [];
+        renderizarPainelLetraSync(-1, 0, 0);
+        atualizarStatusSincronia("Correcao cancelada. Usando a sincronia original.");
+        atualizarPainelSyncManual();
+    } else if (letraAtualSemSync) {
         renderizarLetraSemSync(
             document.getElementById("divLetra"),
             letraAtualSemSync,
@@ -2371,6 +2129,7 @@ function cancelarSyncManual() {
             "Letra sem marcacao de tempo. Use a sincronizacao aproximada como guia."
         );
     } else {
+        // Se não tinha backup nem letra sem sync, apenas atualiza o painel para esconder os botões
         atualizarPainelSyncManual();
     }
 }
@@ -2564,15 +2323,19 @@ async function buscarLetra(canalYoutube, tituloVideo) {
         painel.id = "painelSync";
         painel.className = "painel-sync";
         painel.innerHTML = `
-            <span>Sincronia:</span>
-            <button onclick="mudarOffset(-0.5)" class="painel-sync-btn">-0.5s</button>
-            <span id="txtOffset">0s</span>
-            <button onclick="mudarOffset(0.5)" class="painel-sync-btn">+0.5s</button>
-            <button id="btnIniciarSyncManual" onclick="iniciarMarcacaoManual()" class="painel-sync-btn" style="display:none;">Marcar ritmo</button>
-            <button id="btnMarcarSyncManual" onclick="marcarLinhaSyncManual()" class="painel-sync-btn" style="display:none;">Marcar linha</button>
-            <button id="btnSalvarSyncManual" onclick="salvarSyncManual()" class="painel-sync-btn" style="display:none;">Salvar</button>
-            <button id="btnCancelarSyncManual" onclick="cancelarSyncManual()" class="painel-sync-btn" style="display:none;">Cancelar</button>
-            <span id="txtSyncManual"></span>
+            <div style="display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; width: 100%;">
+                <span>Ajuste Fino:</span>
+                <button onclick="mudarOffset(-0.2)" class="painel-sync-btn">-0.2s</button>
+                <span id="txtOffset">0s</span>
+                <button onclick="mudarOffset(0.2)" class="painel-sync-btn">+0.2s</button>
+            </div>
+            <div style="display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 5px; width: 100%;">
+                <button id="btnIniciarSyncManual" onclick="iniciarMarcacaoManual()" class="painel-sync-btn" style="display:none;">Corrigir Ritmo</button>
+                <button id="btnMarcarSyncManual" onclick="marcarLinhaSyncManual()" class="painel-sync-btn" style="display:none;">Marcar linha</button>
+                <button id="btnSalvarSyncManual" onclick="salvarSyncManual()" class="painel-sync-btn" style="display:none;">Salvar</button>
+                <button id="btnCancelarSyncManual" onclick="cancelarSyncManual()" class="painel-sync-btn" style="display:none;">Cancelar</button>
+                <span id="txtSyncManual"></span>
+            </div>
         `;
         divLetra.parentNode.insertBefore(painel, divLetra);
     } else {
@@ -2619,43 +2382,11 @@ async function buscarLetra(canalYoutube, tituloVideo) {
             }
         }
 
-        try {
-            const letraVerificada = await buscarLetraVerificadaSupabase([
-                { song: tituloLimpo, artist: canalYoutube },
-                ...tentativas
-            ]);
-
-            if (renderizarLetraPrioritaria(
-                divLetra,
-                letraVerificada,
-                "Letra validada encontrada no banco. Aperte play para cantar."
-            )) {
-                return;
-            }
-        } catch (erro) {
-            logErroPadrao("Supabase verified lyrics select", erro);
-        }
-
         let cacheHit = null;
         if (permitirCache) {
             cacheHit = buscarLetraNoCache(cacheKeysBusca);
             if (!cacheLetraEhCompativel(cacheHit, tituloLimpo, tentativas)) {
                 cacheHit = null;
-            }
-        }
-
-        if (!cacheHit && permitirCache) {
-            try {
-                const supabaseHit = await buscarLetraSupabase(
-                    [{ song: tituloLimpo, artist: canalYoutube }, ...tentativas],
-                    cacheKeysBusca
-                );
-                if (cacheLetraEhCompativel(supabaseHit, tituloLimpo, tentativas)) {
-                    cacheHit = supabaseHit;
-                    salvarLetraNoCache(cacheKeysPersistencia, supabaseHit);
-                }
-            } catch (erro) {
-                logErroPadrao("Supabase lyrics select", erro);
             }
         }
 
@@ -2702,7 +2433,6 @@ async function buscarLetra(canalYoutube, tituloVideo) {
             };
             if (permitirCache) {
                 salvarLetraNoCache(cacheKeysPersistencia, payload);
-                salvarLetraSupabase(cacheKeysPersistencia, payload);
             }
 
             if (linhasSincronizadas.length > 0) {
@@ -2730,7 +2460,6 @@ async function buscarLetra(canalYoutube, tituloVideo) {
             };
             if (permitirCache) {
                 salvarLetraNoCache(cacheKeysPersistencia, payload);
-                salvarLetraSupabase(cacheKeysPersistencia, payload);
             }
             renderizarLetraSemSync(
                 divLetra,
@@ -2755,7 +2484,6 @@ async function buscarLetra(canalYoutube, tituloVideo) {
             };
             if (permitirCache) {
                 salvarLetraNoCache(cacheKeysPersistencia, payload);
-                salvarLetraSupabase(cacheKeysPersistencia, payload);
             }
             renderizarLetraSemSync(
                 divLetra,
