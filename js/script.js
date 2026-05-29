@@ -1462,12 +1462,12 @@ function inicializarPaginaVS() {
     if (turno === "1") {
         infoTurno.innerText = `${j1} canta primeiro!`;
         subTextoTurno.innerText = "Preparem-se para o duelo.";
-        if (btnCantar) btnCantar.innerText = `Comecar vez de ${j1}`;
+        if (btnCantar) btnCantar.innerText = `Começar`;
     } else {
         let pts1 = localStorage.getItem("pontuacaoJ1") || "0";
         infoTurno.innerText = `Agora e a vez de ${j2}!`;
         subTextoTurno.innerHTML = `A pontuacao de ${j1} foi: <strong>${pts1} pts</strong>`;
-        if (btnCantar) btnCantar.innerText = `Comecar vez de ${j2}`;
+        if (btnCantar) btnCantar.innerText = `Começar`;
     }
 }
 
